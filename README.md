@@ -58,4 +58,3 @@ git remote add origin https://github.com/<username>/<nama-repo>.git
 git push -u origin main
 ```
 
-Tambahkan dosen sebagai collaborator (Settings > Collaborators) atau jadikan repo public agar progres bisa dipantau.

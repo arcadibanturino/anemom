@@ -14,3 +14,6 @@ val MutedText = Color(0xFF8A7079)        // teks sekunder
 val AmberBg = Color(0xFFFFF3DC)          // chip "Risiko sedang"
 val AmberText = Color(0xFFA86A19)
 val ErrorRed = Color(0xFFD32F2F)
+val GreenBg = Color(0xFFE3F4E8)          // chip status baik (Normal, Diminum, Kualitas baik)
+val GreenText = Color(0xFF2E7D4F)
+val RedBg = Color(0xFFFDE4E4)            // chip risiko tinggi

@@ -53,7 +53,7 @@ import com.kelompok.anemom.data.model.DashboardData
 import com.kelompok.anemom.ui.AppViewModelProvider
 import com.kelompok.anemom.ui.components.AnemomCard
 import com.kelompok.anemom.ui.components.AnemomChip
-import com.kelompok.anemom.ui.theme.AmberBg
+import com.kelompok.anemom.ui.components.RiskChip
 import com.kelompok.anemom.ui.theme.AmberText
 import com.kelompok.anemom.ui.theme.CardBorder
 import com.kelompok.anemom.ui.theme.Maroon
@@ -239,7 +239,7 @@ private fun HbCard(dashboard: DashboardData) {
                 verticalAlignment = Alignment.Bottom
             ) {
                 Text(
-                    text = DateFormats.hb(dashboard.lastHb),
+                    text = dashboard.lastHb?.let { DateFormats.hb(it) } ?: "-",
                     fontSize = 40.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Maroon
@@ -251,11 +251,7 @@ private fun HbCard(dashboard: DashboardData) {
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
-            AnemomChip(
-                text = dashboard.riskLabel,
-                containerColor = AmberBg,
-                contentColor = AmberText
-            )
+            dashboard.risk?.let { RiskChip(risk = it) }
         }
         Spacer(Modifier.height(4.dp))
         Text(
@@ -361,8 +357,10 @@ private fun TrendCard(dashboard: DashboardData) {
             color = Maroon
         )
         Spacer(Modifier.height(8.dp))
-        HbTrendChart(points = dashboard.hbTrend)
-        Spacer(Modifier.height(4.dp))
+        if (dashboard.hbTrend.size >= 2) {
+            HbTrendChart(points = dashboard.hbTrend)
+            Spacer(Modifier.height(4.dp))
+        }
         Text(
             text = dashboard.hbTrendNote,
             style = MaterialTheme.typography.bodySmall,

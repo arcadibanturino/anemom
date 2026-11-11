@@ -16,20 +16,31 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kelompok.anemom.data.model.HbPoint
+import com.kelompok.anemom.data.model.HbRisk
 import com.kelompok.anemom.ui.theme.AmberText
 import com.kelompok.anemom.ui.theme.CardBorder
 import com.kelompok.anemom.ui.theme.MutedText
 import com.kelompok.anemom.ui.theme.Pink500
 import com.kelompok.anemom.util.DateFormats
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 
-/** Grafik garis tren Hb (10-12 g/dL) dengan garis batas anemia di 11 g/dL. */
+/**
+ * Grafik garis tren Hb dengan garis batas anemia (11 g/dL) putus-putus.
+ * Sumbu Y minimal 10-12 g/dL dan melebar otomatis jika ada nilai di luar rentang itu.
+ * Jika titik lebih dari 6, label tanggal ditampilkan selang-seling agar tidak bertumpuk.
+ */
 @Composable
 fun HbTrendChart(
     points: List<HbPoint>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    height: Dp = 180.dp
 ) {
     val textMeasurer = rememberTextMeasurer()
     val axisStyle = TextStyle(fontSize = 10.sp, color = MutedText)
@@ -38,12 +49,14 @@ fun HbTrendChart(
     Canvas(
         modifier = modifier
             .fillMaxWidth()
-            .height(180.dp)
+            .height(height)
     ) {
-        if (points.size < 2) return@Canvas
+        if (points.isEmpty()) return@Canvas
 
-        val minY = 10f
-        val maxY = 12f
+        val minY = min(10f, floor(points.minOf { it.value }))
+        val maxY = max(12f, ceil(points.maxOf { it.value }))
+        val step = if (maxY - minY > 4f) 2 else 1
+
         val leftPad = 46.dp.toPx()
         val rightPad = 18.dp.toPx()
         val topPad = 22.dp.toPx()
@@ -51,48 +64,57 @@ fun HbTrendChart(
         val chartWidth = size.width - leftPad - rightPad
         val chartHeight = size.height - topPad - bottomPad
 
-        fun xOf(index: Int): Float = leftPad + chartWidth * index / (points.size - 1)
-        fun yOf(value: Float): Float = topPad + chartHeight * (1f - (value - minY) / (maxY - minY))
+        fun xOf(index: Int): Float =
+            if (points.size == 1) leftPad + chartWidth / 2f
+            else leftPad + chartWidth * index / (points.size - 1)
+
+        fun yOf(value: Float): Float =
+            topPad + chartHeight * (1f - (value - minY) / (maxY - minY))
 
         // Label sumbu Y dan garis bantu tipis
-        listOf(12f, 11f, 10f).forEach { value ->
-            val label = textMeasurer.measure("${value.toInt()} g/dL", axisStyle)
-            drawText(label, topLeft = Offset(0f, yOf(value) - label.size.height / 2f))
-            if (value != 11f) {
+        var tick = minY.toInt()
+        while (tick <= maxY.toInt()) {
+            val label = textMeasurer.measure("$tick g/dL", axisStyle)
+            drawText(label, topLeft = Offset(0f, yOf(tick.toFloat()) - label.size.height / 2f))
+            if (tick != HbRisk.REFERENCE_HB.toInt()) {
                 drawLine(
                     color = CardBorder,
-                    start = Offset(leftPad, yOf(value)),
-                    end = Offset(size.width - rightPad, yOf(value)),
+                    start = Offset(leftPad, yOf(tick.toFloat())),
+                    end = Offset(size.width - rightPad, yOf(tick.toFloat())),
                     strokeWidth = 1.dp.toPx()
                 )
             }
+            tick += step
         }
 
         // Garis batas anemia (11 g/dL) putus-putus
         drawLine(
             color = AmberText.copy(alpha = 0.7f),
-            start = Offset(leftPad, yOf(11f)),
-            end = Offset(size.width - rightPad, yOf(11f)),
+            start = Offset(leftPad, yOf(HbRisk.REFERENCE_HB)),
+            end = Offset(size.width - rightPad, yOf(HbRisk.REFERENCE_HB)),
             strokeWidth = 1.dp.toPx(),
             pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
         )
 
         // Garis tren
-        val path = Path()
-        points.forEachIndexed { index, point ->
-            val x = xOf(index)
-            val y = yOf(point.value.coerceIn(minY, maxY))
-            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        if (points.size >= 2) {
+            val path = Path()
+            points.forEachIndexed { index, point ->
+                val x = xOf(index)
+                val y = yOf(point.value)
+                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            drawPath(
+                path = path,
+                color = Pink500,
+                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+            )
         }
-        drawPath(
-            path = path,
-            color = Pink500,
-            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
 
         // Titik, label nilai, dan label tanggal
+        val labelEvery = if (points.size <= 6) 1 else ceil(points.size / 6f).toInt()
         points.forEachIndexed { index, point ->
-            val center = Offset(xOf(index), yOf(point.value.coerceIn(minY, maxY)))
+            val center = Offset(xOf(index), yOf(point.value))
             drawCircle(color = Color.White, radius = 5.dp.toPx(), center = center)
             drawCircle(
                 color = Pink500,
@@ -101,17 +123,23 @@ fun HbTrendChart(
                 style = Stroke(width = 2.dp.toPx())
             )
 
-            val valueLabel = textMeasurer.measure(DateFormats.hb(point.value), valueStyle)
-            drawText(
-                valueLabel,
-                topLeft = Offset(center.x - valueLabel.size.width / 2f, center.y - 20.dp.toPx())
-            )
+            val showLabel = index % labelEvery == 0 || index == points.lastIndex
+            if (showLabel) {
+                val valueLabel = textMeasurer.measure(DateFormats.hb(point.value), valueStyle)
+                drawText(
+                    valueLabel,
+                    topLeft = Offset(center.x - valueLabel.size.width / 2f, center.y - 20.dp.toPx())
+                )
 
-            val dateLabel = textMeasurer.measure(point.label, axisStyle)
-            drawText(
-                dateLabel,
-                topLeft = Offset(center.x - dateLabel.size.width / 2f, size.height - bottomPad + 8.dp.toPx())
-            )
+                val dateLabel = textMeasurer.measure(point.label, axisStyle)
+                drawText(
+                    dateLabel,
+                    topLeft = Offset(
+                        center.x - dateLabel.size.width / 2f,
+                        size.height - bottomPad + 8.dp.toPx()
+                    )
+                )
+            }
         }
     }
 }

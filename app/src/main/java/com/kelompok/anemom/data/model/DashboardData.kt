@@ -12,9 +12,10 @@ data class DashboardData(
     val pregnancyWeek: Int,
     val trimesterLabel: String,
     val dueDateText: String,
-    val lastHb: Float,
+    /** Hb laboratorium terakhir; null jika belum ada hasil yang disimpan. */
+    val lastHb: Float?,
     val lastHbNote: String,
-    val riskLabel: String,
+    val risk: HbRisk?,
     val ttdPercent: Int,
     val ttdSummary: String,
     val hbTrend: List<HbPoint>,

@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 
 enum class WatchStage { IDLE, RECORDING, DONE }
 
-data class SmartwatchUiState(
+data class SmartbandUiState(
     val stage: WatchStage = WatchStage.IDLE,
     val secondsLeft: Int = RECORD_SECONDS,
     val heartRate: Int? = null,
@@ -26,10 +26,10 @@ const val RECORD_SECONDS = 60
  * SIMULASI. Belum ada koneksi BLE ke band dan belum ada model PPG.
  * TODO(fitur): sambungkan ke band lewat BLE, rekam sinyal PPG asli, kirim ke model estimasi Hb.
  */
-class SmartwatchViewModel : ViewModel() {
+class SmartbandViewModel : ViewModel() {
 
-    private val _uiState = MutableStateFlow(SmartwatchUiState())
-    val uiState: StateFlow<SmartwatchUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(SmartbandUiState())
+    val uiState: StateFlow<SmartbandUiState> = _uiState.asStateFlow()
 
     private var job: Job? = null
 
@@ -37,13 +37,13 @@ class SmartwatchViewModel : ViewModel() {
         if (_uiState.value.stage == WatchStage.RECORDING) return
         job?.cancel()
         job = viewModelScope.launch {
-            _uiState.value = SmartwatchUiState(stage = WatchStage.RECORDING)
+            _uiState.value = SmartbandUiState(stage = WatchStage.RECORDING)
             // Simulasi 60 detik dipercepat: 1 detik asli = 10 detik rekam (selesai dalam 6 detik).
             repeat(RECORD_SECONDS / 10) { tick ->
                 delay(1_000)
                 _uiState.update { it.copy(secondsLeft = RECORD_SECONDS - (tick + 1) * 10) }
             }
-            _uiState.value = SmartwatchUiState(
+            _uiState.value = SmartbandUiState(
                 stage = WatchStage.DONE,
                 secondsLeft = 0,
                 heartRate = (78..92).random(),
@@ -55,6 +55,6 @@ class SmartwatchViewModel : ViewModel() {
 
     fun reset() {
         job?.cancel()
-        _uiState.value = SmartwatchUiState()
+        _uiState.value = SmartbandUiState()
     }
 }

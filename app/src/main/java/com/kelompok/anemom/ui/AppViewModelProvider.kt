@@ -12,7 +12,7 @@ import com.kelompok.anemom.ui.onboarding.OnboardingViewModel
 import com.kelompok.anemom.ui.profile.ProfileViewModel
 import com.kelompok.anemom.ui.riwayat.RiwayatViewModel
 import com.kelompok.anemom.ui.skrining.InputHbViewModel
-import com.kelompok.anemom.ui.skrining.SmartwatchViewModel
+import com.kelompok.anemom.ui.skrining.SmartbandViewModel
 import com.kelompok.anemom.ui.splash.SplashViewModel
 import com.kelompok.anemom.ui.ttd.TtdViewModel
 
@@ -30,7 +30,7 @@ object AppViewModelProvider {
         initializer {
             InputHbViewModel(anemomApp().container.hbRepository, anemomApp().container.authRepository)
         }
-        initializer { SmartwatchViewModel() }
+        initializer { SmartbandViewModel() }
     }
 }
 

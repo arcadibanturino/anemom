@@ -36,12 +36,12 @@ import com.kelompok.anemom.ui.theme.MutedText
 import com.kelompok.anemom.ui.theme.Pink100
 import com.kelompok.anemom.ui.theme.Pink500
 
-/** Tab Skrining (tengah): pintu masuk ke AI Scan, Smartwatch, dan Input Hb. */
+/** Tab Skrining (tengah): pintu masuk ke AI Scan, Smartband, dan Input Hb. */
 @Composable
 fun SkriningScreen(
     onBack: () -> Unit,
     onAiScan: () -> Unit,
-    onSmartwatch: () -> Unit,
+    onSmartband: () -> Unit,
     onInputHb: () -> Unit
 ) {
     AnemomScreen(
@@ -58,9 +58,9 @@ fun SkriningScreen(
         Spacer(Modifier.height(12.dp))
         SkriningOption(
             icon = Icons.Outlined.Watch,
-            title = "Smartwatch & PPG",
+            title = "Smartband & PPG",
             description = "Rekam sinyal PPG dari gelang/band selama 60 detik.",
-            onClick = onSmartwatch
+            onClick = onSmartband
         )
         Spacer(Modifier.height(12.dp))
         SkriningOption(

@@ -66,7 +66,7 @@ private data class FeatureTile(val label: String, val icon: ImageVector)
 
 private val featureTiles = listOf(
     FeatureTile("AI Scan Mata", Icons.Outlined.Visibility),
-    FeatureTile("Smartwatch", Icons.Outlined.Watch),
+    FeatureTile("Smartband", Icons.Outlined.Watch),
     FeatureTile("Grafik Hb", Icons.Outlined.Timeline),
     FeatureTile("Nutrisi", Icons.Outlined.Restaurant),
     FeatureTile("Scan Makanan", Icons.Outlined.CenterFocusWeak),

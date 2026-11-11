@@ -32,7 +32,7 @@ import com.kelompok.anemom.ui.riwayat.RiwayatScreen
 import com.kelompok.anemom.ui.skrining.AiScanScreen
 import com.kelompok.anemom.ui.skrining.InputHbScreen
 import com.kelompok.anemom.ui.skrining.SkriningScreen
-import com.kelompok.anemom.ui.skrining.SmartwatchScreen
+import com.kelompok.anemom.ui.skrining.SmartbandScreen
 import com.kelompok.anemom.ui.ttd.TtdScreen
 import com.kelompok.anemom.ui.theme.MutedText
 import com.kelompok.anemom.ui.theme.Pink100
@@ -52,9 +52,9 @@ private const val ROUTE_ABOUT = "tentang"
 
 /** Sub-halaman Skrining (bottom nav tetap tampil, tab Skrining tetap menyala). */
 private const val ROUTE_AI_SCAN = "ai_scan"
-private const val ROUTE_SMARTWATCH = "smartwatch"
+private const val ROUTE_Smartband = "Smartband"
 private const val ROUTE_INPUT_HB = "input_hb"
-private val skriningSubRoutes = setOf(ROUTE_AI_SCAN, ROUTE_SMARTWATCH, ROUTE_INPUT_HB)
+private val skriningSubRoutes = setOf(ROUTE_AI_SCAN, ROUTE_Smartband, ROUTE_INPUT_HB)
 
 /** Tab yang menyala untuk sebuah route. */
 private fun tabFor(route: String?): MainTab? = when {
@@ -116,7 +116,7 @@ fun MainScreen(
                     onFeatureClick = { name ->
                         when (name) {
                             "AI Scan Mata" -> tabNavController.navigate(ROUTE_AI_SCAN)
-                            "Smartwatch" -> tabNavController.navigate(ROUTE_SMARTWATCH)
+                            "Smartband" -> tabNavController.navigate(ROUTE_Smartband)
                             "Grafik Hb" -> tabNavController.navigateToTab(MainTab.Riwayat)
                             else -> onOpenFeature(name)
                         }
@@ -130,7 +130,7 @@ fun MainScreen(
                 SkriningScreen(
                     onBack = { tabNavController.navigateToTab(MainTab.Beranda) },
                     onAiScan = { tabNavController.navigate(ROUTE_AI_SCAN) },
-                    onSmartwatch = { tabNavController.navigate(ROUTE_SMARTWATCH) },
+                    onSmartband = { tabNavController.navigate(ROUTE_Smartband) },
                     onInputHb = { tabNavController.navigate(ROUTE_INPUT_HB) }
                 )
             }
@@ -146,8 +146,8 @@ fun MainScreen(
                     onInputHb = { tabNavController.navigate(ROUTE_INPUT_HB) }
                 )
             }
-            composable(ROUTE_SMARTWATCH) {
-                SmartwatchScreen(
+            composable(ROUTE_Smartband) {
+                SmartbandScreen(
                     onBack = { tabNavController.popBackStack() },
                     onInputHb = { tabNavController.navigate(ROUTE_INPUT_HB) }
                 )

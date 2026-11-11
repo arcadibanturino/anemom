@@ -95,8 +95,8 @@ fun TodoScreen(
 private fun todoDescription(title: String): String = when (title) {
     "AI Scan Mata", "Skrining" ->
         "TODO: ambil foto area pinggiran mata dengan kamera, lalu jalankan model AI untuk memprediksi gejala anemia."
-    "Smartwatch" ->
-        "TODO: sambungkan band/smartwatch dan baca sinyal PPG untuk skrining awal."
+    "Smartband" ->
+        "TODO: sambungkan band/Smartband dan baca sinyal PPG untuk skrining awal."
     "Grafik Hb" ->
         "TODO: grafik riwayat Hb lengkap dengan filter periode."
     "Nutrisi" ->

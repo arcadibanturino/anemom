@@ -40,17 +40,17 @@ import com.kelompok.anemom.ui.theme.MutedText
 import com.kelompok.anemom.ui.theme.Pink100
 import com.kelompok.anemom.ui.theme.Pink500
 
-/** Smartwatch & PPG. Seluruh data di layar ini SIMULASI (lihat [SmartwatchViewModel]). */
+/** Smartband & PPG. Seluruh data di layar ini SIMULASI (lihat [SmartbandViewModel]). */
 @Composable
-fun SmartwatchScreen(
+fun SmartbandScreen(
     onBack: () -> Unit,
     onInputHb: () -> Unit,
-    viewModel: SmartwatchViewModel = viewModel(factory = AppViewModelProvider.Factory)
+    viewModel: SmartbandViewModel = viewModel(factory = AppViewModelProvider.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     AnemomScreen(
-        title = "Smartwatch & PPG",
+        title = "Smartband & PPG",
         subtitle = "Rekam sinyal dari gelang/band",
         onBack = onBack
     ) {

@@ -64,7 +64,7 @@ private val onboardingPages = listOf(
         image = R.drawable.img_onb_2,
         chip = "TEKNOLOGI YANG PEDULI",
         title = "Lebih dekat dengan\nkesehatan Bunda",
-        description = "AI Scan Mata dan sinyal PPG smartwatch membantu skrining awal. Bukan pengganti tes Hb darah."
+        description = "AI Scan Mata dan sinyal PPG Smartband membantu skrining awal. Bukan pengganti tes Hb darah."
     ),
     OnboardingPage(
         image = R.drawable.img_onb_3,

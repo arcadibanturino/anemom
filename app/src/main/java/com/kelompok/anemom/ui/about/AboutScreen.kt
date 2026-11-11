@@ -55,7 +55,7 @@ private val aboutFeatures = listOf(
     ),
     AboutFeature(
         Icons.Outlined.Watch,
-        "Smartwatch PPG",
+        "Smartband PPG",
         "Merekam sinyal nadi dan kualitas rekaman, tidak mengukur Hb secara langsung."
     ),
     AboutFeature(

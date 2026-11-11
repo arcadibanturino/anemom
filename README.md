@@ -38,28 +38,3 @@ app/src/main/java/com/kelompok/anemom/
 ├── AnemomApp.kt
 └── MainActivity.kt
 ```
-
-## Menjalankan
-
-1. Buka folder project ini di Android Studio (Ladybug atau lebih baru), tunggu Gradle sync.
-2. Jalankan di emulator/perangkat dengan Android 8.0 (API 26) ke atas.
-3. Alur demo: Splash -> On-boarding -> Daftar -> Beranda -> Profil -> Keluar -> Masuk.
-
-Untuk mengganti package name, gunakan Refactor > Rename di Android Studio, lalu ubah `namespace` dan `applicationId` di `app/build.gradle.kts`.
-
-## Font Poppins (opsional)
-
-Lihat komentar di `ui/theme/Type.kt`.
-
-## Push ke GitHub
-
-```bash
-git init
-git add .
-git commit -m "feat: halaman awal Anemom (splash, onboarding, auth, dashboard, profil)"
-git branch -M main
-git remote add origin https://github.com/<username>/<nama-repo>.git
-git push -u origin main
-```
-
-Tambahkan dosen sebagai collaborator (Settings > Collaborators) atau jadikan repo public agar progres bisa dipantau.

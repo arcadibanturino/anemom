@@ -1,6 +1,5 @@
 package com.kelompok.anemom.ui.auth
 
-import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,7 +29,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -53,11 +51,11 @@ import com.kelompok.anemom.ui.theme.Pink500
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onNavigateToRegister: () -> Unit,
+    onNavigateToForgotPassword: () -> Unit,
     onBack: () -> Unit,
     viewModel: LoginViewModel = viewModel(factory = AppViewModelProvider.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -125,10 +123,7 @@ fun LoginScreen(
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier
                 .align(Alignment.End)
-                .clickable {
-                    // TODO(fitur): alur reset kata sandi
-                    Toast.makeText(context, "Fitur lupa kata sandi segera hadir", Toast.LENGTH_SHORT).show()
-                }
+                .clickable(onClick = onNavigateToForgotPassword)
                 .padding(vertical = 10.dp)
         )
 

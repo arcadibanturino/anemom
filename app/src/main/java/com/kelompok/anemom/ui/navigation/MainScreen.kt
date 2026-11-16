@@ -67,6 +67,7 @@ private fun tabFor(route: String?): MainTab? = when {
 @Composable
 fun MainScreen(
     onOpenFeature: (featureName: String) -> Unit,
+    onOpenMenuList: () -> Unit,
     onLoggedOut: () -> Unit
 ) {
     val tabNavController = rememberNavController()
@@ -118,6 +119,7 @@ fun MainScreen(
                             "AI Scan Mata" -> tabNavController.navigate(ROUTE_AI_SCAN)
                             "Smartband" -> tabNavController.navigate(ROUTE_Smartband)
                             "Grafik Hb" -> tabNavController.navigateToTab(MainTab.Riwayat)
+                            "Rekomendasi Menu Makanan" -> onOpenMenuList()
                             else -> onOpenFeature(name)
                         }
                     }

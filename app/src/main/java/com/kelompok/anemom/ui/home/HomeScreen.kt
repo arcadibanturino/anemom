@@ -22,14 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CenterFocusWeak
 import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.GppGood
 import androidx.compose.material.icons.outlined.Medication
-import androidx.compose.material.icons.outlined.Restaurant
-import androidx.compose.material.icons.outlined.Timeline
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.Watch
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,7 +33,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -61,17 +54,12 @@ import com.kelompok.anemom.ui.theme.MutedText
 import com.kelompok.anemom.ui.theme.Pink100
 import com.kelompok.anemom.ui.theme.Pink500
 import com.kelompok.anemom.util.DateFormats
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import com.kelompok.anemom.ui.nutrisi.MenuRecommendation
+import com.kelompok.anemom.ui.nutrisi.menuRecommendations
 
-private data class FeatureTile(val label: String, val icon: ImageVector)
 
-private val featureTiles = listOf(
-    FeatureTile("AI Scan Mata", Icons.Outlined.Visibility),
-    FeatureTile("Smartband", Icons.Outlined.Watch),
-    FeatureTile("Grafik Hb", Icons.Outlined.Timeline),
-    FeatureTile("Nutrisi", Icons.Outlined.Restaurant),
-    FeatureTile("Scan Makanan", Icons.Outlined.CenterFocusWeak),
-    FeatureTile("Panduan aman", Icons.Outlined.GppGood)
-)
 
 /**
  * Beranda / dashboard.
@@ -127,26 +115,10 @@ private fun HomeContent(
         HbCard(dashboard)
         TtdCard(dashboard)
 
-        Text(
-            text = "Untuk kesehatan Bunda",
-            style = MaterialTheme.typography.titleMedium,
-            color = Maroon,
-            modifier = Modifier.padding(top = 4.dp)
+        MenuRecommendationSection(
+            onSeeAll = { onFeatureClick("Rekomendasi Menu Makanan") },
+            onDetail = { title -> onFeatureClick(title) }
         )
-        featureTiles.chunked(3).forEach { rowTiles ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                rowTiles.forEach { tile ->
-                    FeatureTileCard(
-                        tile = tile,
-                        onClick = { onFeatureClick(tile.label) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
 
         Text(
             text = "AI/PPG hanya skrining awal, bukan tes darah.\nKonfirmasi dengan pemeriksaan Hb darah.",
@@ -315,36 +287,94 @@ private fun TtdCard(dashboard: DashboardData) {
 }
 
 @Composable
-private fun FeatureTileCard(
-    tile: FeatureTile,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+private fun MenuRecommendationSection(
+    onSeeAll: () -> Unit,
+    onDetail: (String) -> Unit
 ) {
-    Column(
-        modifier = modifier
-            .height(84.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color.White)
-            .border(1.dp, CardBorder, RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = tile.icon,
-            contentDescription = null,
-            tint = Pink500,
-            modifier = Modifier.size(26.dp)
-        )
-        Spacer(Modifier.height(8.dp))
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Rekomendasi Menu Makanan",
+                style = MaterialTheme.typography.titleMedium,
+                color = Maroon,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "Lihat Semua",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Pink500,
+                modifier = Modifier
+                    .clickable(onClick = onSeeAll)
+                    .padding(vertical = 4.dp)
+            )
+        }
         Text(
-            text = tile.label,
-            style = MaterialTheme.typography.labelMedium,
-            color = Maroon,
-            textAlign = TextAlign.Center,
-            maxLines = 1
+            text = "Pilihan makanan bergizi untuk membantu memenuhi kebutuhan nutrisi Bunda.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MutedText
         )
+
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(menuRecommendations.filter { it.warning == null }, key = { it.title }) { menu ->
+                MenuCard(menu = menu, onClick = { onDetail(menu.title) })
+            }
+        }
+
+        Text(
+            text = "Geser untuk melihat menu lainnya →",
+            style = MaterialTheme.typography.bodySmall,
+            color = MutedText
+        )
+    }
+}
+
+@Composable
+private fun MenuCard(menu: MenuRecommendation, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        modifier = Modifier
+            .width(240.dp)
+            .clip(shape)
+            .background(Color.White)
+            .border(1.dp, CardBorder, shape)
+            .clickable(onClick = onClick)
+    ) {
+        Image(
+            painter = painterResource(menu.imageRes),
+            contentDescription = menu.title,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(130.dp),
+            contentScale = ContentScale.Crop
+        )
+        Column(Modifier.padding(14.dp)) {
+            Text(
+                text = menu.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = Maroon,
+                maxLines = 1
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = menu.ironText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MutedText
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = menu.portionText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MutedText
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Lihat Detail →",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Pink500
+            )
+        }
     }
 }
 

@@ -13,6 +13,8 @@ import com.kelompok.anemom.ui.auth.RegisterScreen
 import com.kelompok.anemom.ui.onboarding.OnboardingScreen
 import com.kelompok.anemom.ui.placeholder.TodoScreen
 import com.kelompok.anemom.ui.splash.SplashScreen
+import com.kelompok.anemom.ui.auth.ForgotPasswordScreen
+import com.kelompok.anemom.ui.nutrisi.MenuListScreen
 
 /**
  * Alur utama:
@@ -53,9 +55,13 @@ fun AppNavGraph(navController: NavHostController = rememberNavController()) {
                     }
                 },
                 onNavigateToRegister = { navController.navigate(Routes.REGISTER) },
-                // Tombol kembali di Login = perilaku back sistem (keluar aplikasi).
+                onNavigateToForgotPassword = { navController.navigate(Routes.FORGOT_PASSWORD) }, // baru
                 onBack = { backDispatcher?.onBackPressed() }
             )
+        }
+
+        composable(Routes.FORGOT_PASSWORD) {
+            ForgotPasswordScreen(onBackToLogin = { navController.popBackStack() })
         }
 
         composable(Routes.REGISTER) {
@@ -73,11 +79,20 @@ fun AppNavGraph(navController: NavHostController = rememberNavController()) {
         composable(Routes.MAIN) {
             MainScreen(
                 onOpenFeature = { name -> navController.navigate(Routes.todo(name)) },
+                onOpenMenuList = { navController.navigate(Routes.MENU_LIST) },
                 onLoggedOut = {
                     navController.navigate(Routes.LOGIN) {
                         popUpTo(Routes.MAIN) { inclusive = true }
                     }
                 }
+            )
+        }
+
+        composable(Routes.MENU_LIST) {
+            MenuListScreen(
+                onBack = { navController.popBackStack() },
+                // Detail menu belum dibuat, sementara membuka halaman "Segera hadir".
+                onOpenDetail = { name -> navController.navigate(Routes.todo(name)) }
             )
         }
 

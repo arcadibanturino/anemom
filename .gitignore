@@ -22,3 +22,7 @@ secrets.properties
 Thumbs.db
 
 /anemom/
+
+anemom-backend/.env
+anemom-backend/storage/
+__pycache__/

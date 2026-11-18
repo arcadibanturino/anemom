@@ -1,6 +1,5 @@
 package com.kelompok.anemom.ui.profile
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -38,7 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -54,6 +52,7 @@ import com.kelompok.anemom.ui.theme.Maroon
 import com.kelompok.anemom.ui.theme.MutedText
 import com.kelompok.anemom.ui.theme.Pink100
 import com.kelompok.anemom.ui.theme.Pink500
+import com.kelompok.anemom.util.AgeCalculator
 import com.kelompok.anemom.util.DateFormats
 import com.kelompok.anemom.util.PregnancyCalculator
 import java.time.LocalDate
@@ -63,20 +62,19 @@ private const val NOT_FILLED = "Belum diisi"
 /**
  * Halaman "Profil saya" sesuai desain Figma.
  *
- * TODO(backend/fitur): tanggal lahir, fasilitas kesehatan, status kehamilan pertama, dan
- * tombol Edit belum punya datanya (belum ada di form Register); sementara tampil "Belum diisi".
+ * Tombol Edit di kedua bagian membuka [EditProfileScreen]. Kolom yang belum terisi tampil "Belum diisi".
  */
 @Composable
 fun ProfileScreen(
     onBack: () -> Unit,
     onOpenAbout: () -> Unit,
+    onEditProfile: () -> Unit,
     onOpenFeature: (featureName: String) -> Unit,
     onLoggedOut: () -> Unit,
     viewModel: ProfileViewModel = viewModel(factory = AppViewModelProvider.Factory)
 ) {
     val account by viewModel.account.collectAsStateWithLifecycle()
     var showLogoutDialog by remember { mutableStateOf(false) }
-    val context = LocalContext.current
 
     val hpht = remember(account) {
         account?.hpht?.takeIf { it.isNotBlank() }
@@ -85,11 +83,13 @@ fun ProfileScreen(
     val weeks = hpht?.let { PregnancyCalculator.weeksSince(it) }
     val dueDate = hpht?.let { DateFormats.long(PregnancyCalculator.dueDate(it)) }
 
-    val fullName = account?.name.orEmpty()
-    val firstName = fullName.trim().split(" ").firstOrNull().orEmpty()
-    val comingSoon = {
-        Toast.makeText(context, "Fitur edit segera hadir", Toast.LENGTH_SHORT).show()
+    val birthDate = remember(account) {
+        account?.birthDate?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
     }
+    val ageText = birthDate?.let { AgeCalculator.ageYears(it) }?.takeIf { it >= 0 }?.let { "$it tahun" }
+
+    val firstName = account?.name.orEmpty().trim().split(" ").firstOrNull().orEmpty()
 
     Column(
         modifier = Modifier
@@ -120,31 +120,32 @@ fun ProfileScreen(
                     fontWeight = FontWeight.ExtraBold,
                     color = Maroon
                 )
-                Text(
-                    text = fullName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MutedText
-                )
+                if (ageText != null) {
+                    Text(
+                        text = ageText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MutedText
+                    )
+                }
             }
         }
 
-        SectionHeader(title = "Data pribadi", onEdit = comingSoon)
+        SectionHeader(title = "Data pribadi", onEdit = onEditProfile)
         InfoCard(
             rows = listOf(
-                "Tanggal lahir" to NOT_FILLED,
-                "Email" to (account?.email ?: "-"),
-                "Nomor telepon" to (account?.phone ?: "-")
+                "Tanggal lahir" to (birthDate?.let { DateFormats.long(it) } ?: NOT_FILLED),
+                "Email" to (account?.email ?: "-")
             ),
             containerColor = Color.White
         )
 
-        SectionHeader(title = "Data kehamilan", onEdit = comingSoon)
+        SectionHeader(title = "Data kehamilan", onEdit = onEditProfile)
         InfoCard(
             rows = listOf(
                 "Usia kehamilan" to (weeks?.let { "$it minggu" } ?: "-"),
                 "Trimester" to (account?.let { trimesterShort(it.trimester) } ?: "-"),
                 "Perkiraan lahir" to (dueDate ?: "-"),
-                "Fasilitas kesehatan" to NOT_FILLED
+                "Fasilitas kesehatan" to (account?.healthFacility?.takeIf { it.isNotBlank() } ?: NOT_FILLED)
             ),
             containerColor = Pink100.copy(alpha = 0.7f)
         )

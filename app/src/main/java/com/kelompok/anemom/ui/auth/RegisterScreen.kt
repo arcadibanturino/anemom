@@ -30,15 +30,9 @@ import androidx.compose.material.icons.outlined.PregnantWoman
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kelompok.anemom.ui.AppViewModelProvider
+import com.kelompok.anemom.ui.components.AnemomDatePickerDialog
 import com.kelompok.anemom.ui.components.AnemomTextField
 import com.kelompok.anemom.ui.components.AnemomTopBar
 import com.kelompok.anemom.ui.components.GradientButton
@@ -62,12 +57,11 @@ import com.kelompok.anemom.ui.theme.Maroon
 import com.kelompok.anemom.ui.theme.MutedText
 import com.kelompok.anemom.ui.theme.Pink100
 import com.kelompok.anemom.ui.theme.Pink500
+import com.kelompok.anemom.util.AgeCalculator
 import com.kelompok.anemom.util.DateFormats
 import com.kelompok.anemom.util.PregnancyCalculator
-import java.time.Instant
-import java.time.ZoneOffset
+import java.time.LocalDate
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterScreen(
     onRegisterSuccess: () -> Unit,
@@ -76,7 +70,8 @@ fun RegisterScreen(
     viewModel: RegisterViewModel = viewModel(factory = AppViewModelProvider.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    var showDatePicker by remember { mutableStateOf(false) }
+    var showBirthDatePicker by remember { mutableStateOf(false) }
+    var showHphtPicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -114,6 +109,18 @@ fun RegisterScreen(
             placeholder = "Nama atau nama panggilan Bunda",
             leadingIcon = Icons.Outlined.Person,
             errorText = state.nameError
+        )
+        Spacer(Modifier.height(12.dp))
+        AnemomTextField(
+            label = "Tanggal Lahir",
+            value = state.birthDate?.let { DateFormats.long(it) }.orEmpty(),
+            onValueChange = {},
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = "Pilih Tanggal",
+            leadingIcon = Icons.Outlined.CalendarMonth,
+            readOnly = true,
+            onClick = { showBirthDatePicker = true },
+            errorText = state.birthDateError
         )
         Spacer(Modifier.height(12.dp))
         AnemomTextField(
@@ -157,7 +164,7 @@ fun RegisterScreen(
             placeholder = "Pilih Tanggal",
             leadingIcon = Icons.Outlined.CalendarMonth,
             readOnly = true,
-            onClick = { showDatePicker = true },
+            onClick = { showHphtPicker = true },
             errorText = state.hphtError
         )
         Spacer(Modifier.height(12.dp))
@@ -254,32 +261,26 @@ fun RegisterScreen(
         Spacer(Modifier.height(24.dp))
     }
 
-    if (showDatePicker) {
-        // HPHT tidak boleh di masa depan (toleransi 1 hari karena picker memakai UTC).
-        val pickerState = rememberDatePickerState(
-            selectableDates = object : SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long): Boolean =
-                    utcTimeMillis <= System.currentTimeMillis() + 24L * 60 * 60 * 1000
-            }
+    if (showBirthDatePicker) {
+        val today = LocalDate.now()
+        AnemomDatePickerDialog(
+            initialDate = state.birthDate,
+            minDate = today.minusYears(AgeCalculator.MAX_AGE.toLong() + 1),
+            maxDate = today.minusYears(AgeCalculator.MIN_AGE.toLong()),
+            onDismiss = { showBirthDatePicker = false },
+            onDateSelected = viewModel::onBirthDateSelected,
+            displayDate = today.minusYears(25)
         )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        pickerState.selectedDateMillis?.let { millis ->
-                            val date = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
-                            viewModel.onHphtSelected(date)
-                        }
-                        showDatePicker = false
-                    }
-                ) { Text("Pilih") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Batal") }
-            }
-        ) {
-            DatePicker(state = pickerState)
-        }
+    }
+
+    if (showHphtPicker) {
+        val today = LocalDate.now()
+        AnemomDatePickerDialog(
+            initialDate = state.hpht,
+            minDate = today.minusWeeks(PregnancyCalculator.MAX_WEEKS.toLong()),
+            maxDate = today,
+            onDismiss = { showHphtPicker = false },
+            onDateSelected = viewModel::onHphtSelected
+        )
     }
 }

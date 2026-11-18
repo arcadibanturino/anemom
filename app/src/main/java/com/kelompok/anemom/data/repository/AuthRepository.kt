@@ -1,61 +1,124 @@
 package com.kelompok.anemom.data.repository
 
+import android.os.Build
+import com.kelompok.anemom.data.AppEvents
 import com.kelompok.anemom.data.local.SessionManager
 import com.kelompok.anemom.data.local.UserAccount
 import com.kelompok.anemom.data.remote.ApiService
+import com.kelompok.anemom.data.remote.apiCall
+import com.kelompok.anemom.data.remote.dto.LoginRequest
+import com.kelompok.anemom.data.remote.dto.RegisterRequest
+import com.kelompok.anemom.data.remote.dto.UpdateProfileRequest
+import com.kelompok.anemom.data.remote.dto.UserDto
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import java.security.MessageDigest
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.launch
 
 /**
- * Repository autentikasi.
- *
- * Untuk checkpoint ini login/register berjalan secara LOKAL (DataStore) supaya alur
- * Login -> Beranda -> Logout bisa didemokan. Hanya satu akun yang disimpan per perangkat.
- *
- * TODO(backend): ganti isi login/register/logout agar memanggil [api]
- * (atau Firebase Auth), lalu simpan token sesi, bukan hash kata sandi.
+ * Autentikasi lewat API backend. Server adalah sumber kebenaran: kata sandi tidak pernah
+ * disimpan di HP, yang disimpan hanya token sesi dan salinan profil (lihat [SessionManager]).
  */
 class AuthRepository(
     private val session: SessionManager,
-    @Suppress("unused") private val api: ApiService
+    private val api: ApiService,
+    private val events: AppEvents
 ) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var lastProfileRefresh = 0L
 
     val onboardingDone: Flow<Boolean> = session.onboardingDone
     val isLoggedIn: Flow<Boolean> = session.isLoggedIn
-    val account: Flow<UserAccount?> = session.account
+
+    /** Profil dari salinan lokal; setiap ada yang berlangganan, profil disegarkan dari server di latar belakang. */
+    val account: Flow<UserAccount?> = session.account.onStart {
+        scope.launch { refreshProfile() }
+    }
 
     suspend fun setOnboardingDone() = session.setOnboardingDone()
 
-    suspend fun register(account: UserAccount, password: String): Result<Unit> {
-        // TODO(backend): api.register(RegisterRequest(...))
-        return runCatching {
-            session.saveAccount(account.copy(passwordHash = hash(password)))
-            session.setLoggedIn(true)
+    /**
+     * Daftar akun baru. Dari [account] hanya name, email, birthDate, dan hpht yang dikirim;
+     * usia kehamilan dan trimester dihitung server dari HPHT.
+     */
+    suspend fun register(account: UserAccount, password: String): Result<Unit> =
+        apiCall {
+            api.register(
+                RegisterRequest(
+                    name = account.name.trim(),
+                    email = account.email.trim(),
+                    password = password,
+                    birthDate = account.birthDate,
+                    hpht = account.hpht,
+                    deviceName = deviceName()
+                )
+            )
+        }.mapCatching { data ->
+            session.saveSession(data.token, data.user.toAccount())
+            events.invalidateData()
         }
-    }
 
-    suspend fun login(email: String, password: String): Result<Unit> {
-        // TODO(backend): api.login(LoginRequest(email, password))
-        val saved = session.account.first()
-            ?: return Result.failure(IllegalStateException("Akun belum terdaftar. Silakan daftar terlebih dahulu."))
-
-        val valid = saved.email.equals(email.trim(), ignoreCase = true) &&
-            saved.passwordHash == hash(password)
-        if (!valid) {
-            return Result.failure(IllegalStateException("Email atau kata sandi salah."))
+    suspend fun login(email: String, password: String): Result<Unit> =
+        apiCall {
+            api.login(LoginRequest(email = email.trim(), password = password, deviceName = deviceName()))
+        }.mapCatching { data ->
+            session.saveSession(data.token, data.user.toAccount())
+            events.invalidateData()
         }
-        session.setLoggedIn(true)
-        return Result.success(Unit)
-    }
 
+    /** Keluar. Token dicabut di server (jika ada koneksi), lalu sesi lokal dihapus apa pun hasilnya. */
     suspend fun logout() {
-        // TODO(backend): hapus token sesi / panggil endpoint logout
-        session.setLoggedIn(false)
+        runCatching { api.logout() }
+        session.clearSession()
     }
 
-    private fun hash(value: String): String =
-        MessageDigest.getInstance("SHA-256")
-            .digest(value.toByteArray())
-            .joinToString("") { "%02x".format(it) }
+    /** Segarkan salinan profil dari GET /me (dibatasi sekali per 30 detik). */
+    suspend fun refreshProfile(): Result<Unit> {
+        if (session.token.first() == null) return Result.success(Unit)
+        val now = System.currentTimeMillis()
+        if (now - lastProfileRefresh < 30_000) return Result.success(Unit)
+        lastProfileRefresh = now
+        return apiCall { api.me() }.mapCatching { session.saveAccount(it.toAccount()) }
+    }
+
+    /**
+     * Simpan perubahan profil (PUT /me). Berhasil = salinan lokal diganti dengan data dari server
+     * dan semua layar mengambil ulang datanya (usia kehamilan di Beranda ikut berubah bila HPHT diubah).
+     */
+    suspend fun updateProfile(
+        name: String,
+        email: String,
+        birthDate: String,
+        hpht: String,
+        healthFacility: String
+    ): Result<Unit> =
+        apiCall {
+            api.updateMe(
+                UpdateProfileRequest(
+                    name = name.trim(),
+                    email = email.trim(),
+                    birthDate = birthDate,
+                    hpht = hpht,
+                    healthFacility = healthFacility.trim()
+                )
+            )
+        }.mapCatching { user ->
+            session.saveAccount(user.toAccount())
+            lastProfileRefresh = System.currentTimeMillis()
+            events.invalidateData()
+        }
+
+    private fun deviceName(): String = "${Build.MANUFACTURER} ${Build.MODEL}".take(100)
 }
+
+private fun UserDto.toAccount() = UserAccount(
+    name = name,
+    email = email,
+    birthDate = profile.birthDate.orEmpty(),
+    hpht = profile.hpht.orEmpty(),
+    trimester = pregnancy.trimester,
+    healthFacility = profile.healthFacility.orEmpty()
+)

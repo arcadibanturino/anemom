@@ -1,6 +1,5 @@
 package com.kelompok.anemom.data
 
-import com.kelompok.anemom.data.local.HealthCodec
 import com.kelompok.anemom.data.model.HbResult
 import com.kelompok.anemom.data.model.TtdEntry
 import org.junit.Assert.assertEquals

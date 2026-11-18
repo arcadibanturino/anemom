@@ -4,16 +4,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kelompok.anemom.data.model.TtdEntry
 import com.kelompok.anemom.data.repository.TtdRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
-import kotlin.math.roundToInt
 
 data class TtdUiState(
     val reminderOn: Boolean = true,
@@ -27,29 +28,28 @@ data class TtdUiState(
     val month: YearMonth = YearMonth.now()
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class TtdViewModel(private val repository: TtdRepository) : ViewModel() {
 
-    private val month = MutableStateFlow(YearMonth.now())
+    /** Bulan yang dipilih pengguna; data bulannya diambil dari server. */
+    private val selectedMonth = MutableStateFlow(YearMonth.now())
 
     val uiState: StateFlow<TtdUiState> = combine(
-        repository.entries,
-        repository.reminderOn,
-        month
-    ) { entries, reminderOn, shownMonth ->
-        val today = LocalDate.now()
-        val takenDates = entries.map { it.date }.toSet()
-        val windowStart = today.minusDays(6)
-        val last7 = takenDates.count { !it.isBefore(windowStart) && !it.isAfter(today) }
-
+        selectedMonth.flatMapLatest { repository.month(it) },
+        repository.reminderOn
+    ) { data, reminderOn ->
         TtdUiState(
             reminderOn = reminderOn,
-            takenToday = today in takenDates,
-            today = today,
-            takenDates = takenDates,
-            history = entries.sortedWith(compareByDescending<TtdEntry> { it.date }.thenByDescending { it.time }),
-            takenLast7Days = last7,
-            percentLast7Days = (last7 * 100f / 7f).roundToInt(),
-            month = shownMonth
+            takenToday = data.takenToday,
+            today = LocalDate.now(),
+            takenDates = data.entries.map { it.date }.toSet(),
+            history = data.history,
+            // Kepatuhan 7 hari terakhir dihitung server dan tidak bergantung pada bulan yang dilihat.
+            takenLast7Days = data.takenLast7Days,
+            percentLast7Days = data.percentLast7Days,
+            // Bulan ikut data yang sudah dimuat, supaya kalender tidak menampilkan
+            // tanda minum bulan lama pada bulan baru selama menunggu server.
+            month = data.month
         )
     }.stateIn(
         scope = viewModelScope,
@@ -57,10 +57,11 @@ class TtdViewModel(private val repository: TtdRepository) : ViewModel() {
         initialValue = TtdUiState()
     )
 
-    fun previousMonth() = month.update { it.minusMonths(1) }
+    fun previousMonth() = selectedMonth.update { it.minusMonths(1) }
 
-    fun nextMonth() = month.update { it.plusMonths(1) }
+    fun nextMonth() = selectedMonth.update { it.plusMonths(1) }
 
+    /** Hasilnya (gagal/berhasil) ditangani repository: berhasil -> data dimuat ulang, gagal -> Toast. */
     fun markTakenToday() {
         viewModelScope.launch { repository.markTakenToday() }
     }

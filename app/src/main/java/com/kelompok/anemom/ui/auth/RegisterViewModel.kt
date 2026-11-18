@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kelompok.anemom.data.local.UserAccount
 import com.kelompok.anemom.data.repository.AuthRepository
+import com.kelompok.anemom.util.AgeCalculator
 import com.kelompok.anemom.util.PregnancyCalculator
 import com.kelompok.anemom.util.Validators
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,12 +19,14 @@ data class RegisterUiState(
     val email: String = "",
     val password: String = "",
     val confirmPassword: String = "",
+    val birthDate: LocalDate? = null,
     val hpht: LocalDate? = null,
     val agreed: Boolean = false,
     val nameError: String? = null,
     val emailError: String? = null,
     val passwordError: String? = null,
     val confirmError: String? = null,
+    val birthDateError: String? = null,
     val hphtError: String? = null,
     val errorMessage: String? = null,
     val isLoading: Boolean = false
@@ -50,7 +53,11 @@ class RegisterViewModel(private val authRepository: AuthRepository) : ViewModel(
 
     fun onAgreedChange(v: Boolean) = _uiState.update { it.copy(agreed = v, errorMessage = null) }
 
-    /** Setelah HPHT dipilih, trimester diisi otomatis (masih bisa diubah manual). */
+    fun onBirthDateSelected(date: LocalDate) = _uiState.update {
+        it.copy(birthDate = date, birthDateError = null, errorMessage = null)
+    }
+
+    /** Setelah HPHT dipilih, usia kehamilan dan trimester terisi otomatis. */
     fun onHphtSelected(date: LocalDate) = _uiState.update {
         it.copy(hpht = date, hphtError = null, errorMessage = null)
     }
@@ -66,6 +73,7 @@ class RegisterViewModel(private val authRepository: AuthRepository) : ViewModel(
         val emailError = if (!Validators.isValidEmail(s.email)) "Format email tidak valid" else null
         val passwordError = if (!Validators.isValidPassword(s.password)) "Kata sandi minimal 8 karakter" else null
         val confirmError = if (s.confirmPassword != s.password) "Konfirmasi kata sandi tidak sama" else null
+        val birthDateError = AgeCalculator.validate(s.birthDate)
         val hpht = s.hpht
         val hphtError = when {
             hpht == null -> "Pilih tanggal HPHT"
@@ -75,7 +83,7 @@ class RegisterViewModel(private val authRepository: AuthRepository) : ViewModel(
             else -> null
         }
 
-        val hasFieldError = listOf(nameError, emailError, passwordError, confirmError, hphtError)
+        val hasFieldError = listOf(nameError, emailError, passwordError, confirmError, birthDateError, hphtError)
             .any { it != null }
 
         if (hasFieldError || !s.agreed) {
@@ -85,6 +93,7 @@ class RegisterViewModel(private val authRepository: AuthRepository) : ViewModel(
                     emailError = emailError,
                     passwordError = passwordError,
                     confirmError = confirmError,
+                    birthDateError = birthDateError,
                     hphtError = hphtError,
                     errorMessage = if (!s.agreed) {
                         "Setujui Syarat Penggunaan dan Kebijakan Privasi terlebih dahulu."
@@ -97,8 +106,7 @@ class RegisterViewModel(private val authRepository: AuthRepository) : ViewModel(
         val account = UserAccount(
             name = s.name.trim(),
             email = s.email.trim(),
-            phone = "",                       // kolom telepon sudah tidak diisi di form
-            passwordHash = "",
+            birthDate = s.birthDate?.toString().orEmpty(),
             hpht = hpht?.toString().orEmpty(),
             trimester = s.trimester ?: 1
         )

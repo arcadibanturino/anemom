@@ -11,39 +11,39 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
 private val Context.anemomDataStore: DataStore<Preferences> by preferencesDataStore(name = "anemom_prefs")
 
 /**
- * Akun yang tersimpan di perangkat.
- * [hpht] disimpan dalam format ISO (yyyy-MM-dd).
- *
- * TODO(backend): saat backend siap, akun disimpan di server dan di sini
- * cukup menyimpan token sesi.
+ * Salinan profil pengguna di perangkat (sumber aslinya server: GET /me).
+ * Dipakai supaya nama/profil langsung tampil sebelum respons server datang.
+ * [birthDate] dan [hpht] berformat ISO (yyyy-MM-dd); kosong jika belum diisi.
+ * Usia, usia kehamilan, trimester, dan HPL dihitung dari kedua tanggal itu.
  */
 data class UserAccount(
     val name: String,
     val email: String,
-    val phone: String,
-    val passwordHash: String,
+    val birthDate: String = "",
     val hpht: String,
-    val trimester: Int
+    val trimester: Int,
+    val healthFacility: String = ""
 )
 
-/** Menyimpan status onboarding, status login, dan akun lokal memakai DataStore. */
+/** Menyimpan status onboarding, token sesi, dan salinan profil memakai DataStore. */
 class SessionManager(context: Context) {
 
     private val dataStore = context.anemomDataStore
 
     private object Keys {
         val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
-        val LOGGED_IN = booleanPreferencesKey("logged_in")
+        val TOKEN = stringPreferencesKey("auth_token")
         val NAME = stringPreferencesKey("account_name")
         val EMAIL = stringPreferencesKey("account_email")
-        val PHONE = stringPreferencesKey("account_phone")
-        val PASSWORD_HASH = stringPreferencesKey("account_password_hash")
+        val BIRTH_DATE = stringPreferencesKey("account_birth_date")
+        val FACILITY = stringPreferencesKey("account_health_facility")
         val HPHT = stringPreferencesKey("account_hpht")
         val TRIMESTER = intPreferencesKey("account_trimester")
     }
@@ -54,17 +54,23 @@ class SessionManager(context: Context) {
 
     val onboardingDone: Flow<Boolean> = preferences.map { it[Keys.ONBOARDING_DONE] ?: false }
 
-    val isLoggedIn: Flow<Boolean> = preferences.map { it[Keys.LOGGED_IN] ?: false }
+    /** Token Bearer; null jika belum masuk. */
+    val token: Flow<String?> = preferences
+        .map { it[Keys.TOKEN]?.takeIf { token -> token.isNotBlank() } }
+        .distinctUntilChanged()
+
+    /** Dianggap sudah masuk selama token tersimpan (token 30 hari; server yang menolak bila kedaluwarsa). */
+    val isLoggedIn: Flow<Boolean> = token.map { it != null }
 
     val account: Flow<UserAccount?> = preferences.map { p ->
         val email = p[Keys.EMAIL] ?: return@map null
         UserAccount(
             name = p[Keys.NAME].orEmpty(),
             email = email,
-            phone = p[Keys.PHONE].orEmpty(),
-            passwordHash = p[Keys.PASSWORD_HASH].orEmpty(),
+            birthDate = p[Keys.BIRTH_DATE].orEmpty(),
             hpht = p[Keys.HPHT].orEmpty(),
-            trimester = p[Keys.TRIMESTER] ?: 1
+            trimester = p[Keys.TRIMESTER] ?: 1,
+            healthFacility = p[Keys.FACILITY].orEmpty()
         )
     }
 
@@ -72,18 +78,38 @@ class SessionManager(context: Context) {
         dataStore.edit { it[Keys.ONBOARDING_DONE] = true }
     }
 
-    suspend fun setLoggedIn(value: Boolean) {
-        dataStore.edit { it[Keys.LOGGED_IN] = value }
+    /** Simpan token + profil sekaligus setelah register/login berhasil. */
+    suspend fun saveSession(token: String, account: UserAccount) {
+        dataStore.edit {
+            it[Keys.TOKEN] = token
+            writeAccount(it, account)
+        }
     }
 
+    /** Perbarui salinan profil (mis. setelah GET /me). */
     suspend fun saveAccount(account: UserAccount) {
+        dataStore.edit { writeAccount(it, account) }
+    }
+
+    /** Keluar: hapus token dan profil. Status onboarding dibiarkan. */
+    suspend fun clearSession() {
         dataStore.edit {
-            it[Keys.NAME] = account.name
-            it[Keys.EMAIL] = account.email
-            it[Keys.PHONE] = account.phone
-            it[Keys.PASSWORD_HASH] = account.passwordHash
-            it[Keys.HPHT] = account.hpht
-            it[Keys.TRIMESTER] = account.trimester
+            it.remove(Keys.TOKEN)
+            it.remove(Keys.NAME)
+            it.remove(Keys.EMAIL)
+            it.remove(Keys.BIRTH_DATE)
+            it.remove(Keys.FACILITY)
+            it.remove(Keys.HPHT)
+            it.remove(Keys.TRIMESTER)
         }
+    }
+
+    private fun writeAccount(p: androidx.datastore.preferences.core.MutablePreferences, account: UserAccount) {
+        p[Keys.NAME] = account.name
+        p[Keys.EMAIL] = account.email
+        p[Keys.BIRTH_DATE] = account.birthDate
+        p[Keys.FACILITY] = account.healthFacility
+        p[Keys.HPHT] = account.hpht
+        p[Keys.TRIMESTER] = account.trimester
     }
 }

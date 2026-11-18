@@ -56,10 +56,11 @@ import com.kelompok.anemom.ui.theme.Pink500
 import com.kelompok.anemom.util.DateFormats
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.CircularProgressIndicator
+import com.kelompok.anemom.ui.components.AnemomOutlinedButton
+import com.kelompok.anemom.ui.nutrisi.MenuImage
 import com.kelompok.anemom.ui.nutrisi.MenuRecommendation
-import com.kelompok.anemom.ui.nutrisi.menuRecommendations
-
-
 
 /**
  * Beranda / dashboard.
@@ -71,15 +72,60 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel(factory = AppViewModelProvider.Factory)
 ) {
     val data by viewModel.dashboard.collectAsStateWithLifecycle()
+    val error by viewModel.loadError.collectAsStateWithLifecycle()
+    val menus by viewModel.menus.collectAsStateWithLifecycle()
 
-    data?.let { dashboard ->
-        HomeContent(dashboard = dashboard, onFeatureClick = onFeatureClick)
+    val dashboard = data
+    if (dashboard != null) {
+        HomeContent(dashboard = dashboard, menus = menus, onFeatureClick = onFeatureClick)
+    } else {
+        HomeLoading(error = error, onRetry = viewModel::retry)
+    }
+}
+
+/** Tampil selama data Beranda pertama belum datang dari server; jika gagal ada tombol ulangi. */
+@Composable
+private fun HomeLoading(error: String?, onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        if (error == null) {
+            CircularProgressIndicator(color = Pink500)
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Memuat data Bunda...",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MutedText
+            )
+        } else {
+            Text(
+                text = "Beranda belum bisa dimuat",
+                style = MaterialTheme.typography.titleMedium,
+                color = Maroon,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = error,
+                style = MaterialTheme.typography.bodySmall,
+                color = MutedText,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(16.dp))
+            AnemomOutlinedButton(text = "Coba lagi", onClick = onRetry)
+        }
     }
 }
 
 @Composable
 private fun HomeContent(
     dashboard: DashboardData,
+    menus: List<MenuRecommendation>,
     onFeatureClick: (String) -> Unit
 ) {
     Column(
@@ -116,8 +162,8 @@ private fun HomeContent(
         TtdCard(dashboard)
 
         MenuRecommendationSection(
-            onSeeAll = { onFeatureClick("Rekomendasi Menu Makanan") },
-            onDetail = { title -> onFeatureClick(title) }
+            menus = menus,
+            onSeeAll = { onFeatureClick("Rekomendasi Menu Makanan") }
         )
 
         Text(
@@ -288,8 +334,8 @@ private fun TtdCard(dashboard: DashboardData) {
 
 @Composable
 private fun MenuRecommendationSection(
-    onSeeAll: () -> Unit,
-    onDetail: (String) -> Unit
+    menus: List<MenuRecommendation>,
+    onSeeAll: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -315,22 +361,28 @@ private fun MenuRecommendationSection(
             color = MutedText
         )
 
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(menuRecommendations.filter { it.warning == null }, key = { it.title }) { menu ->
-                MenuCard(menu = menu, onClick = { onDetail(menu.title) })
+        val shown = menus.filter { it.warning == null }
+        if (shown.isEmpty()) {
+            Text(
+                text = "Rekomendasi makanan belum tersedia.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MutedText
+            )
+        } else {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(shown, key = { it.title }) { menu -> MenuCard(menu = menu) }
             }
+            Text(
+                text = "Geser untuk melihat bahan lainnya →",
+                style = MaterialTheme.typography.bodySmall,
+                color = MutedText
+            )
         }
-
-        Text(
-            text = "Geser untuk melihat menu lainnya →",
-            style = MaterialTheme.typography.bodySmall,
-            color = MutedText
-        )
     }
 }
 
 @Composable
-private fun MenuCard(menu: MenuRecommendation, onClick: () -> Unit) {
+private fun MenuCard(menu: MenuRecommendation) {
     val shape = RoundedCornerShape(20.dp)
     Column(
         modifier = Modifier
@@ -338,15 +390,13 @@ private fun MenuCard(menu: MenuRecommendation, onClick: () -> Unit) {
             .clip(shape)
             .background(Color.White)
             .border(1.dp, CardBorder, shape)
-            .clickable(onClick = onClick)
     ) {
-        Image(
-            painter = painterResource(menu.imageRes),
+        MenuImage(
+            imageUrl = menu.imageUrl,
             contentDescription = menu.title,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(130.dp),
-            contentScale = ContentScale.Crop
+                .height(130.dp)
         )
         Column(Modifier.padding(14.dp)) {
             Text(
@@ -357,22 +407,21 @@ private fun MenuCard(menu: MenuRecommendation, onClick: () -> Unit) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = menu.ironText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MutedText
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = menu.portionText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MutedText
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = "Lihat Detail →",
+                text = menu.tag,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = Pink500
+                color = Pink500,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = menu.description.orEmpty(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MutedText,
+                minLines = 3,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

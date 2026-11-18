@@ -89,11 +89,7 @@ fun AppNavGraph(navController: NavHostController = rememberNavController()) {
         }
 
         composable(Routes.MENU_LIST) {
-            MenuListScreen(
-                onBack = { navController.popBackStack() },
-                // Detail menu belum dibuat, sementara membuka halaman "Segera hadir".
-                onOpenDetail = { name -> navController.navigate(Routes.todo(name)) }
-            )
+            MenuListScreen(onBack = { navController.popBackStack() })
         }
 
         composable(

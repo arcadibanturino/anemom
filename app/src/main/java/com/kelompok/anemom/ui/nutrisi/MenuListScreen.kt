@@ -1,6 +1,5 @@
 package com.kelompok.anemom.ui.nutrisi
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,14 +20,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kelompok.anemom.ui.AppViewModelProvider
 import com.kelompok.anemom.ui.components.AnemomCard
 import com.kelompok.anemom.ui.components.BackCircleButton
 import com.kelompok.anemom.ui.theme.AmberText
@@ -42,8 +43,10 @@ import com.kelompok.anemom.ui.theme.Pink500
 @Composable
 fun MenuListScreen(
     onBack: () -> Unit,
-    onOpenDetail: (menuTitle: String) -> Unit
+    viewModel: MenuListViewModel = viewModel(factory = AppViewModelProvider.Factory)
 ) {
+    val menus by viewModel.menus.collectAsStateWithLifecycle()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -89,25 +92,32 @@ fun MenuListScreen(
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Padukan sumber zat besi, protein, sayur, dan buah. " +
-                        "Nilai zat besi berikut adalah perkiraan per porsi.",
+                text = "Padukan sumber zat besi dengan buah kaya vitamin C. " +
+                    "Beri jeda sekitar 2 jam antara TTD dan teh, kopi, atau susu.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Maroon
             )
         }
         Spacer(Modifier.height(16.dp))
 
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            menuRecommendations.forEach { menu ->
-                MenuListItem(menu = menu, onClick = { onOpenDetail(menu.title) })
+        if (menus.isEmpty()) {
+            Text(
+                text = "Rekomendasi makanan belum tersedia.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MutedText
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                menus.forEach { menu -> MenuListItem(menu = menu) }
             }
         }
 
         Spacer(Modifier.height(20.dp))
         Text(
-            text = "Rujukan gizi: NIH ODS, Iron fact sheet.\n" +
-                    "Keamanan kehamilan: NHS, Foods to avoid.\n" +
-                    "Tetap konsumsi TTD sesuai anjuran bidan atau dokter.",
+            text = "Rujukan: Kemenkes RI, Buku Tablet Tambah Darah.\n" +
+                "Keamanan kehamilan: NHS, Foods to avoid.\n" +
+                "Jenis dan jumlah makanan mengikuti anjuran dokter gizi atau tenaga kesehatan. " +
+                "Tetap konsumsi TTD sesuai anjuran.",
             style = MaterialTheme.typography.bodySmall,
             color = MutedText
         )
@@ -116,7 +126,7 @@ fun MenuListScreen(
 }
 
 @Composable
-private fun MenuListItem(menu: MenuRecommendation, onClick: () -> Unit) {
+private fun MenuListItem(menu: MenuRecommendation) {
     val shape = RoundedCornerShape(20.dp)
     Column(
         modifier = Modifier
@@ -124,15 +134,13 @@ private fun MenuListItem(menu: MenuRecommendation, onClick: () -> Unit) {
             .clip(shape)
             .background(Color.White)
             .border(1.dp, CardBorder, shape)
-            .clickable(onClick = onClick)
     ) {
-        Image(
-            painter = painterResource(menu.imageRes),
+        MenuImage(
+            imageUrl = menu.imageUrl,
             contentDescription = menu.title,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(144.dp),
-            contentScale = ContentScale.Crop
+                .height(144.dp)
         )
         Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Text(
@@ -141,18 +149,18 @@ private fun MenuListItem(menu: MenuRecommendation, onClick: () -> Unit) {
                 color = Maroon
             )
             Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = menu.tag,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Pink500
+            )
+            if (!menu.description.isNullOrBlank()) {
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    text = menu.ironText,
+                    text = menu.description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MutedText,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = "Lihat Detail →",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Pink500
+                    color = MutedText
                 )
             }
             if (menu.warning != null) {

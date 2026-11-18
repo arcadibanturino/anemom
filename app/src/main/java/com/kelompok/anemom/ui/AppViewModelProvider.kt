@@ -9,6 +9,7 @@ import com.kelompok.anemom.ui.auth.LoginViewModel
 import com.kelompok.anemom.ui.auth.RegisterViewModel
 import com.kelompok.anemom.ui.home.HomeViewModel
 import com.kelompok.anemom.ui.onboarding.OnboardingViewModel
+import com.kelompok.anemom.ui.profile.EditProfileViewModel
 import com.kelompok.anemom.ui.profile.ProfileViewModel
 import com.kelompok.anemom.ui.riwayat.RiwayatViewModel
 import com.kelompok.anemom.ui.skrining.InputHbViewModel
@@ -16,6 +17,7 @@ import com.kelompok.anemom.ui.skrining.SmartbandViewModel
 import com.kelompok.anemom.ui.splash.SplashViewModel
 import com.kelompok.anemom.ui.ttd.TtdViewModel
 import com.kelompok.anemom.ui.auth.ForgotPasswordViewModel
+import com.kelompok.anemom.ui.nutrisi.MenuListViewModel
 
 /** Satu factory untuk semua ViewModel; dependensi diambil dari AppContainer. */
 object AppViewModelProvider {
@@ -25,8 +27,15 @@ object AppViewModelProvider {
         initializer { LoginViewModel(anemomApp().container.authRepository) }
         initializer { RegisterViewModel(anemomApp().container.authRepository) }
         initializer { ForgotPasswordViewModel() }
-        initializer { HomeViewModel(anemomApp().container.homeRepository) }
+        initializer {
+            HomeViewModel(
+                anemomApp().container.homeRepository,
+                anemomApp().container.nutritionRepository
+            )
+        }
+        initializer { MenuListViewModel(anemomApp().container.nutritionRepository) }
         initializer { ProfileViewModel(anemomApp().container.authRepository) }
+        initializer { EditProfileViewModel(anemomApp().container.authRepository) }
         initializer { TtdViewModel(anemomApp().container.ttdRepository) }
         initializer { RiwayatViewModel(anemomApp().container.hbRepository) }
         initializer {

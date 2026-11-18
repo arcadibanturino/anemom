@@ -17,8 +17,11 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // TODO(backend): ganti dengan URL backend sungguhan (harus diakhiri "/")
-        buildConfigField("String", "BASE_URL", "\"https://api.anemom.example/\"")
+        // Alamat API backend (harus diakhiri "/"). Bisa ditimpa tanpa mengubah file ini, lewat
+        // ~/.gradle/gradle.properties atau gradle.properties lokal:  ANEMOM_BASE_URL=https://.../api/v1/
+        val baseUrl = (project.findProperty("ANEMOM_BASE_URL") as String?)
+            ?: "https://anemom.sovereigns.my.id/api/v1/"
+        buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
     }
 
     buildTypes {
@@ -83,6 +86,9 @@ dependencies {
 
     // Coroutines + Flow
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    // Memuat gambar dari server (foto bahan makanan)
+    implementation("io.coil-kt:coil-compose:2.7.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

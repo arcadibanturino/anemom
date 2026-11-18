@@ -1,83 +1,93 @@
 package com.kelompok.anemom.data.repository
 
-import com.kelompok.anemom.data.local.SessionManager
+import com.kelompok.anemom.data.AppEvents
 import com.kelompok.anemom.data.model.DashboardData
 import com.kelompok.anemom.data.model.HbPoint
 import com.kelompok.anemom.data.model.HbRisk
+import com.kelompok.anemom.data.remote.ApiService
+import com.kelompok.anemom.data.remote.apiCall
+import com.kelompok.anemom.data.remote.dto.DashboardDto
 import com.kelompok.anemom.util.DateFormats
 import com.kelompok.anemom.util.PregnancyCalculator
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.StateFlow
 import java.time.LocalDate
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /**
- * Sumber data halaman Beranda.
- *
- * - Nama, usia kehamilan, trimester, dan HPL dihitung dari akun lokal.
- * - Hb terakhir dan tren berasal dari hasil Hb yang diinput di menu Skrining > Input Hb darah.
- * - Kepatuhan TTD dihitung dari catatan minum TTD 7 hari terakhir.
+ * Sumber data halaman Beranda: satu panggilan GET /dashboard.
+ * Usia kehamilan, trimester, HPL, kepatuhan TTD, Hb terakhir, dan tren dihitung server;
+ * di sini hanya diubah menjadi teks untuk layar.
  */
 class HomeRepository(
-    private val session: SessionManager,
-    private val hbRepository: HbRepository,
-    private val ttdRepository: TtdRepository
+    private val api: ApiService,
+    private val events: AppEvents
 ) {
-
-    fun dashboard(): Flow<DashboardData> = combine(
-        session.account,
-        hbRepository.results,
-        ttdRepository.entries
-    ) { account, hbResults, ttdEntries ->
-        val today = LocalDate.now()
-        val hpht = account?.hpht?.takeIf { it.isNotBlank() }
-            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-
-        val weeks = hpht?.let { PregnancyCalculator.weeksSince(it, today) } ?: 0
-        val dueDate = hpht?.let { DateFormats.short(PregnancyCalculator.dueDate(it)) } ?: "-"
-        val trimester = account?.trimester ?: 1
-        val firstName = account?.name?.trim()?.split(" ")?.firstOrNull().orEmpty()
-
-        // Hb
-        val latest = hbResults.lastOrNull()
-        val trendResults = hbResults.takeLast(5)
-        val trendNote = when {
-            trendResults.size < 2 -> "Tambahkan hasil Hb berikutnya untuk melihat tren."
-            else -> {
-                val diff = trendResults.last().value - trendResults.first().value
-                val amount = DateFormats.hb(abs(diff))
-                when {
-                    diff > 0.04f -> "Hb naik $amount g/dL dari pemeriksaan pertama."
-                    diff < -0.04f -> "Hb turun $amount g/dL dari pemeriksaan pertama."
-                    else -> "Hb stabil dari pemeriksaan pertama."
-                }
-            }
-        }
-
-        // TTD: jumlah hari minum dalam 7 hari terakhir (termasuk hari ini)
-        val windowStart = today.minusDays(6)
-        val takenInWindow = ttdEntries.map { it.date }.distinct()
-            .count { !it.isBefore(windowStart) && !it.isAfter(today) }
-        val ttdPercent = (takenInWindow * 100f / 7f).roundToInt()
-
-        DashboardData(
-            motherName = firstName,
-            todayText = DateFormats.dayLong(today),
-            pregnancyWeek = weeks,
-            trimesterLabel = PregnancyCalculator.trimesterLabel(trimester),
-            dueDateText = dueDate,
-            lastHb = latest?.value,
-            lastHbNote = if (latest != null) {
-                "${DateFormats.short(latest.date)} · Konsultasikan hasil dengan bidan."
-            } else {
-                "Belum ada hasil Hb. Tambahkan lewat Skrining > Input Hb darah."
-            },
-            risk = latest?.let { HbRisk.classify(it.value) },
-            ttdPercent = ttdPercent,
-            ttdSummary = "$takenInWindow dari 7 hari · TTD berikutnya pukul 20.00",
-            hbTrend = trendResults.map { HbPoint(DateFormats.dayMonth(it.date), it.value) },
-            hbTrendNote = trendNote
-        )
+    private val remote = RemoteSource(events) {
+        apiCall { api.dashboard() }.map { it.toDashboardData() }
     }
+
+    fun dashboard(): Flow<DashboardData> = remote.flow
+
+    /** Pesan galat terakhir saat memuat Beranda (null jika berhasil). */
+    val loadError: StateFlow<String?> = remote.error
+
+    fun retry() = events.invalidateData()
+}
+
+private fun DashboardDto.toDashboardData(): DashboardData {
+    val today = parseDate(today) ?: LocalDate.now()
+    val firstName = motherName.trim().split(" ").firstOrNull().orEmpty()
+    val dueDate = parseDate(pregnancy.dueDate)?.let { DateFormats.short(it) } ?: "-"
+
+    val latest = lastHb
+    val latestValue = latest?.hbValue?.toFloat()
+    val latestDate = latest?.let { parseDate(it.testDate) }
+
+    val trend = hbTrend.mapNotNull { point ->
+        parseDate(point.date)?.let { HbPoint(DateFormats.dayMonth(it), point.hbValue.toFloat()) }
+    }
+    val trendNote = if (trend.size < 2) {
+        "Tambahkan hasil Hb berikutnya untuk melihat tren."
+    } else {
+        val diff = trend.last().value - trend.first().value
+        val amount = DateFormats.hb(abs(diff))
+        when {
+            diff > 0.04f -> "Hb naik $amount g/dL dari pemeriksaan pertama."
+            diff < -0.04f -> "Hb turun $amount g/dL dari pemeriksaan pertama."
+            else -> "Hb stabil dari pemeriksaan pertama."
+        }
+    }
+
+    val reminderTime = ttd.reminderTime.replace(':', '.')
+
+    return DashboardData(
+        motherName = firstName,
+        todayText = DateFormats.dayLong(today),
+        pregnancyWeek = pregnancy.week,
+        trimesterLabel = PregnancyCalculator.trimesterLabel(pregnancy.trimester),
+        dueDateText = dueDate,
+        lastHb = latestValue,
+        lastHbNote = if (latestDate != null) {
+            "${DateFormats.short(latestDate)} · Konsultasikan hasil dengan bidan."
+        } else {
+            "Belum ada hasil Hb. Tambahkan lewat Skrining > Input Hb darah."
+        },
+        risk = latest?.risk?.toRisk() ?: latestValue?.let { HbRisk.classify(it) },
+        ttdPercent = ttd.percentLast7Days,
+        ttdSummary = "${ttd.takenLast7Days} dari 7 hari · TTD berikutnya pukul $reminderTime",
+        hbTrend = trend,
+        hbTrendNote = trendNote
+    )
+}
+
+private fun parseDate(value: String?): LocalDate? =
+    value?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+
+/** Kode risiko server (`normal`/`moderate`/`high`) -> enum aplikasi. */
+private fun String.toRisk(): HbRisk? = when (this) {
+    "normal" -> HbRisk.NORMAL
+    "moderate" -> HbRisk.MODERATE
+    "high" -> HbRisk.HIGH
+    else -> null
 }

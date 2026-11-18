@@ -68,7 +68,12 @@ class InputHbViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             hbRepository.add(hb, state.date, state.facility, SOURCE_LAB)
-            _uiState.update { it.copy(isSaving = false, saved = true) }
+                .onSuccess { _uiState.update { it.copy(isSaving = false, saved = true) } }
+                .onFailure { e ->
+                    _uiState.update {
+                        it.copy(isSaving = false, hbError = e.message ?: "Gagal menyimpan. Coba lagi.")
+                    }
+                }
         }
     }
 

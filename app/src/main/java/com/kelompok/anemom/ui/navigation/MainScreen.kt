@@ -27,6 +27,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.kelompok.anemom.ui.about.AboutScreen
 import com.kelompok.anemom.ui.home.HomeScreen
+import com.kelompok.anemom.ui.profile.EditProfileScreen
 import com.kelompok.anemom.ui.profile.ProfileScreen
 import com.kelompok.anemom.ui.riwayat.RiwayatScreen
 import com.kelompok.anemom.ui.skrining.AiScanScreen
@@ -50,6 +51,9 @@ enum class MainTab(val route: String, val label: String, val icon: ImageVector) 
 /** Halaman "Tentang Anemom" berada di dalam tab Profil, jadi bottom nav tetap tampil. */
 private const val ROUTE_ABOUT = "tentang"
 
+/** Halaman "Edit profil" juga di dalam tab Profil. */
+private const val ROUTE_EDIT_PROFILE = "edit_profil"
+
 /** Sub-halaman Skrining (bottom nav tetap tampil, tab Skrining tetap menyala). */
 private const val ROUTE_AI_SCAN = "ai_scan"
 private const val ROUTE_Smartband = "Smartband"
@@ -59,7 +63,7 @@ private val skriningSubRoutes = setOf(ROUTE_AI_SCAN, ROUTE_Smartband, ROUTE_INPU
 /** Tab yang menyala untuk sebuah route. */
 private fun tabFor(route: String?): MainTab? = when {
     route == null -> null
-    route == ROUTE_ABOUT -> MainTab.Profil
+    route == ROUTE_ABOUT || route == ROUTE_EDIT_PROFILE -> MainTab.Profil
     route in skriningSubRoutes -> MainTab.Skrining
     else -> MainTab.entries.firstOrNull { it.route == route }
 }
@@ -85,7 +89,7 @@ fun MainScreen(
                     NavigationBarItem(
                         selected = selected,
                         onClick = {
-                            if (currentRoute == ROUTE_ABOUT && tab == MainTab.Profil) {
+                            if ((currentRoute == ROUTE_ABOUT || currentRoute == ROUTE_EDIT_PROFILE) && tab == MainTab.Profil) {
                                 tabNavController.popBackStack()
                             } else if (currentRoute in skriningSubRoutes && tab == MainTab.Skrining) {
                                 tabNavController.popBackStack(MainTab.Skrining.route, inclusive = false)
@@ -164,8 +168,15 @@ fun MainScreen(
                 ProfileScreen(
                     onBack = { tabNavController.navigateToTab(MainTab.Beranda) },
                     onOpenAbout = { tabNavController.navigate(ROUTE_ABOUT) },
+                    onEditProfile = { tabNavController.navigate(ROUTE_EDIT_PROFILE) },
                     onOpenFeature = onOpenFeature,
                     onLoggedOut = onLoggedOut
+                )
+            }
+            composable(ROUTE_EDIT_PROFILE) {
+                EditProfileScreen(
+                    onBack = { tabNavController.popBackStack() },
+                    onSaved = { tabNavController.popBackStack() }
                 )
             }
             composable(ROUTE_ABOUT) {

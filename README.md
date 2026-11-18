@@ -16,7 +16,7 @@ Proyek PJBL mata kuliah Aplikasi Mobile.
 | Pengaturan pengingat, Privasi & disclaimer | TODO (halaman placeholder) |
 | Skrining (hub), TTD, Riwayat/Grafik Hb, Input Hb darah | Selesai (disimpan di server lewat API) |
 | Rekomendasi bahan makanan (Beranda + "Lihat Semua") | Selesai (dari server; saran harian berganti tiap hari dan menyesuaikan Hb terakhir; foto bahan dari server) |
-| Detail bahan makanan, Scan Makanan | TODO (menunggu desain) |
+| Detail bahan makanan | TODO (menunggu desain) |
 | Smartband & PPG | Tampilan selesai, data SIMULASI (BLE + model PPG TODO) |
 | AI Scan Mata | Tampilan selesai, kamera + model YOLOv8 TFLite TODO (repository pengiriman ke server sudah siap) |
 | Pengingat TTD sungguhan (notifikasi/FCM) | TODO (server baru menyimpan status dan jam pengingat) |

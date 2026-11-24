@@ -1,141 +1,171 @@
 package com.kelompok.anemom.ui.riwayat
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.kelompok.anemom.data.model.HbRisk
 import com.kelompok.anemom.ui.AppViewModelProvider
-import com.kelompok.anemom.ui.components.AnemomCard
 import com.kelompok.anemom.ui.components.AnemomChip
-import com.kelompok.anemom.ui.components.AnemomScreen
-import com.kelompok.anemom.ui.components.GradientButton
-import com.kelompok.anemom.ui.components.NoteCard
-import com.kelompok.anemom.ui.components.RiskChip
-import com.kelompok.anemom.ui.home.HbTrendChart
+import com.kelompok.anemom.ui.components.AnemomOutlinedButton
+import com.kelompok.anemom.ui.components.AnemomTabHeader
+import com.kelompok.anemom.ui.theme.CardBorder
 import com.kelompok.anemom.ui.theme.Maroon
 import com.kelompok.anemom.ui.theme.MutedText
 import com.kelompok.anemom.ui.theme.Pink100
 import com.kelompok.anemom.ui.theme.Pink500
-import com.kelompok.anemom.util.DateFormats
+import java.time.format.DateTimeFormatter
 
-/** Tab Riwayat: grafik dan daftar hasil Hb darah. */
+private val monthFormat = DateTimeFormatter.ofPattern("MMMM yyyy", indonesian)
+private val dateTimeFormat = DateTimeFormatter.ofPattern("d MMM yyyy · HH.mm", indonesian)
+private val dateFormat = DateTimeFormatter.ofPattern("d MMM yyyy", indonesian)
+
+/** Tab Riwayat: Riwayat pemeriksaan (Hb lab, AI Scan Mata, PPG). Grafik Hb pindah ke Beranda. */
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun RiwayatScreen(
     onBack: () -> Unit,
     onAddHb: () -> Unit,
+    onOpenDetail: (HistoryKind, Long) -> Unit = { _, _ -> },
     viewModel: RiwayatViewModel = viewModel(factory = AppViewModelProvider.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    AnemomScreen(title = "Grafik Hb darah", subtitle = "Pantau tren Hb Bunda", onBack = onBack) {
-        AnemomCard(Modifier.fillMaxWidth()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
+    ) {
+        AnemomTabHeader(title = "Riwayat pemeriksaan", subtitle = "Catatan kesehatan Bunda")
+        Spacer(Modifier.height(16.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HistoryFilter.entries.forEach { f ->
+                val selected = f == state.selectedFilter
                 Text(
-                    text = "Tren Hb",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Maroon,
-                    modifier = Modifier.weight(1f)
+                    text = f.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (selected) Color.White else Pink500,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(if (selected) Pink500 else Pink100)
+                        .clickable { viewModel.setFilter(f) }
+                        .padding(horizontal = 14.dp, vertical = 7.dp)
                 )
-                AnemomChip("Hasil laboratorium", Pink100, Pink500)
             }
-            Spacer(Modifier.height(8.dp))
-            if (state.chartPoints.isEmpty()) {
-                Text(
-                    text = "Belum ada hasil Hb. Tambahkan hasil tes darah Bunda untuk melihat grafik.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MutedText,
-                    modifier = Modifier.padding(vertical = 24.dp)
-                )
-            } else {
-                HbTrendChart(points = state.chartPoints, height = 200.dp)
-            }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Garis putus-putus: batas anemia ${HbRisk.REFERENCE_HB.toInt()} g/dL (rujukan aplikasi)",
-                style = MaterialTheme.typography.bodySmall,
-                color = MutedText
-            )
         }
 
-        state.latest?.let { latest ->
-            Spacer(Modifier.height(14.dp))
-            AnemomCard(Modifier.fillMaxWidth()) {
-                Text("Hasil terakhir", style = MaterialTheme.typography.titleMedium, color = Maroon)
-                Spacer(Modifier.height(6.dp))
+        when {
+            !state.isLoaded -> Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 48.dp),
+                contentAlignment = Alignment.Center
+            ) { CircularProgressIndicator(color = Pink500) }
+
+            state.months.isEmpty() -> {
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    text = "Belum ada pemeriksaan. Catat hasil Hb darah atau lakukan skrining dari tab Skrining.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MutedText
+                )
+                Spacer(Modifier.height(12.dp))
+                AnemomOutlinedButton("Tambah hasil Hb darah", onClick = onAddHb, modifier = Modifier.fillMaxWidth())
+            }
+
+            else -> state.months.forEach { month ->
+                Spacer(Modifier.height(20.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "${DateFormats.hb(latest.value)} g/dL",
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.ExtraBold,
+                        text = month.month.format(monthFormat).replaceFirstChar { it.uppercase() },
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                        fontWeight = FontWeight.Bold,
                         color = Maroon,
                         modifier = Modifier.weight(1f)
                     )
-                    state.latestRisk?.let { RiskChip(it) }
+                    Text("${month.items.size} pemeriksaan", style = MaterialTheme.typography.labelMedium, color = Pink500)
                 }
+                Spacer(Modifier.height(10.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    month.items.forEach { item -> HistoryCard(item) { onOpenDetail(item.kind, item.id) } }
+                }
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun HistoryCard(item: HistoryItem, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Color.White)
+            .border(1.dp, CardBorder, shape)
+            .clickable(onClick = onClick)
+            .padding(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(item.icon(), contentDescription = null, tint = Pink500, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(item.title(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Maroon)
                 Text(
-                    text = DateFormats.long(latest.date),
-                    style = MaterialTheme.typography.bodySmall,
+                    text = if (item is HistoryItem.Hb) item.at.format(dateFormat) else item.at.format(dateTimeFormat),
+                    style = MaterialTheme.typography.labelSmall,
                     color = MutedText
                 )
             }
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = Pink500)
         }
-
-        Spacer(Modifier.height(18.dp))
-        Text("Riwayat hasil", style = MaterialTheme.typography.titleMedium, color = Maroon)
-        Spacer(Modifier.height(8.dp))
-
-        if (state.results.isEmpty() && state.isLoaded) {
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "Belum ada riwayat.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MutedText
+                text = item.mainValue(),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = Maroon,
+                modifier = Modifier.weight(1f)
             )
+            item.chip()?.let { AnemomChip(it.text, containerColor = it.container, contentColor = it.content) }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            state.results.forEach { result ->
-                AnemomCard(Modifier.fillMaxWidth()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = "${DateFormats.hb(result.value)} g/dL",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = Maroon
-                            )
-                            Text(
-                                text = buildString {
-                                    append(DateFormats.short(result.date))
-                                    if (result.facility.isNotBlank()) append(" · ${result.facility}")
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MutedText
-                            )
-                        }
-                        RiskChip(HbRisk.classify(result.value))
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-        GradientButton(text = "Tambah hasil Hb", onClick = onAddHb, icon = Icons.Filled.Add)
-        Spacer(Modifier.height(12.dp))
-        NoteCard("Grafik hanya menampilkan hasil tes darah yang Bunda masukkan. Konsultasikan hasil dengan bidan atau dokter.")
+        Spacer(Modifier.height(8.dp))
+        Text(item.sourceLine(), style = MaterialTheme.typography.labelSmall, color = MutedText)
     }
 }

@@ -9,6 +9,7 @@ data class ScreeningDto(
     /** `done` | `queued` | `processing` | `failed` */
     val status: String = "done",
     @SerializedName("measured_at") val measuredAt: String? = null,
+    @SerializedName("pregnancy_week") val pregnancyWeek: Int? = null,
     /** `anemia` | `non_anemia` */
     val label: String? = null,
     @SerializedName("est_hb") val estHb: Double? = null,

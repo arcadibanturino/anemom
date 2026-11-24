@@ -10,8 +10,11 @@ data class HbResultDto(
     @SerializedName("hb_value") val hbValue: Double = 0.0,
     /** `normal` | `moderate` | `high` (dihitung server). */
     val risk: String? = null,
+    @SerializedName("risk_label") val riskLabel: String? = null,
     val facility: String? = null,
-    val source: String? = null
+    val source: String? = null,
+    @SerializedName("pregnancy_week") val pregnancyWeek: Int? = null,
+    val notes: String? = null
 )
 
 data class HbCreateRequest(
@@ -33,7 +36,10 @@ data class TtdDayDto(
 
 data class TtdMonthDto(
     val month: String = "",
+    /** Hari "Sudah" (diminum). */
     val days: List<TtdDayDto> = emptyList(),
+    /** Hari yang dilaporkan "Belum diminum" dari alarm. */
+    val skipped: List<TtdDayDto> = emptyList(),
     @SerializedName("taken_today") val takenToday: Boolean = false,
     @SerializedName("taken_last_7_days") val takenLast7Days: Int = 0,
     @SerializedName("percent_last_7_days") val percentLast7Days: Int = 0
@@ -54,7 +60,9 @@ data class TtdTakeDto(
 data class TtdSettingsDto(
     @SerializedName("reminder_on") val reminderOn: Boolean = true,
     /** "HH:mm" */
-    @SerializedName("reminder_time") val reminderTime: String = "20:00"
+    @SerializedName("reminder_time") val reminderTime: String = "19:00",
+    /** false = Hb lab terakhir di bawah normal: pengingat wajib aktif. */
+    @SerializedName("can_disable") val canDisable: Boolean = true
 )
 
 data class TtdSettingsRequest(

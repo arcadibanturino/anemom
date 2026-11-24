@@ -32,7 +32,8 @@ data class Screening(
     val score: Float?,
     /** Batas skrining yang dipakai model; null untuk hasil lama. */
     val scoreThreshold: Float?,
-    val inferenceSource: String?
+    val inferenceSource: String?,
+    val pregnancyWeek: Int? = null
 )
 
 /**
@@ -47,6 +48,11 @@ class ScreeningRepository(
     private val events: AppEvents
 ) {
     private val gson = Gson()
+
+    /** Riwayat skrining untuk tab Riwayat; ikut dimuat ulang setelah ada skrining baru. */
+    private val historySource = RemoteSource(events) { recent(limit = 50) }
+    val history: kotlinx.coroutines.flow.Flow<List<Screening>> = historySource.flow
+    val historyError: kotlinx.coroutines.flow.StateFlow<String?> = historySource.error
 
     suspend fun recent(method: String? = null, limit: Int = 20): Result<List<Screening>> =
         apiCall { api.screenings(method, limit) }.map { list -> list.map { it.toModel() } }
@@ -100,5 +106,6 @@ private fun ScreeningDto.toModel() = Screening(
     confidence = confidence?.toFloat(),
     score = score?.toFloat(),
     scoreThreshold = scoreThreshold?.toFloat(),
-    inferenceSource = inferenceSource
+    inferenceSource = inferenceSource,
+    pregnancyWeek = pregnancyWeek
 )

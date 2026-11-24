@@ -8,7 +8,15 @@ data class HbResult(
     val date: LocalDate,
     val value: Float,
     val facility: String,
-    val source: String
+    val source: String,
+    val id: Long = 0,
+    /** Kategori dari server; null = server lama (hitung dengan [HbRisk.classify]). */
+    val risk: HbRisk? = null,
+    /** Label kategori dari server (hb_risk_levels.label). */
+    val riskLabel: String? = null,
+    /** Usia kehamilan (minggu) saat tes, dihitung server. */
+    val pregnancyWeek: Int? = null,
+    val notes: String? = null
 )
 
 /** Satu catatan minum TTD (maksimal satu per hari). */

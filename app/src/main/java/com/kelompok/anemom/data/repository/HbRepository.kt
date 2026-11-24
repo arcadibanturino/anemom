@@ -2,6 +2,7 @@ package com.kelompok.anemom.data.repository
 
 import com.kelompok.anemom.data.AppEvents
 import com.kelompok.anemom.data.model.HbResult
+import com.kelompok.anemom.data.model.HbRisk
 import com.kelompok.anemom.data.remote.ApiService
 import com.kelompok.anemom.data.remote.apiCall
 import com.kelompok.anemom.data.remote.dto.HbCreateRequest
@@ -31,6 +32,10 @@ class HbRepository(
     /** Pesan galat terakhir saat memuat (null jika berhasil). */
     val loadError: StateFlow<String?> = remote.error
 
+    /** Sekali ambil (dipakai layar Detail riwayat). Terbaru dulu. */
+    suspend fun list(): Result<List<HbResult>> =
+        apiCall { api.hbResults() }.map { list -> list.mapNotNull { it.toModel() }.sortedByDescending { it.date } }
+
     /** Simpan hasil Hb baru ke server. Berhasil = semua layar yang menampilkan Hb ikut diperbarui. */
     suspend fun add(value: Float, date: LocalDate, facility: String, source: String): Result<Unit> =
         apiCall {
@@ -52,6 +57,16 @@ private fun HbResultDto.toModel(): HbResult? {
         date = date,
         value = hbValue.toFloat(),
         facility = facility.orEmpty(),
-        source = source.orEmpty()
+        source = source.orEmpty(),
+        id = id,
+        risk = when (risk) {
+            "normal" -> HbRisk.NORMAL
+            "moderate" -> HbRisk.MODERATE
+            "high" -> HbRisk.HIGH
+            else -> null
+        },
+        riskLabel = riskLabel?.ifBlank { null },
+        pregnancyWeek = pregnancyWeek,
+        notes = notes?.trim()?.ifBlank { null }
     )
 }

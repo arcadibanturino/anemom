@@ -1,5 +1,6 @@
 package com.kelompok.anemom
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.widget.Toast
@@ -15,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.rememberNavController
 import com.kelompok.anemom.ui.navigation.AppNavGraph
+import com.kelompok.anemom.ui.navigation.PendingNavigation
 import com.kelompok.anemom.ui.navigation.SessionGuard
 import com.kelompok.anemom.ui.theme.AnemomTheme
 
@@ -26,6 +28,7 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
         )
+        handleOpenRequest(intent)
         val events = (application as AnemomApp).container.events
         setContent {
             AnemomTheme {
@@ -50,5 +53,20 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleOpenRequest(intent)
+    }
+
+    /** Dibuka dari layar alarm: "Lihat Pelacak TTD". */
+    private fun handleOpenRequest(intent: Intent?) {
+        if (intent?.getStringExtra(EXTRA_OPEN) == OPEN_TTD) PendingNavigation.open(PendingNavigation.TTD)
+    }
+
+    companion object {
+        const val EXTRA_OPEN = "open"
+        const val OPEN_TTD = "ttd"
     }
 }

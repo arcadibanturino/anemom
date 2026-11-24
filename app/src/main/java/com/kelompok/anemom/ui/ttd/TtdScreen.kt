@@ -8,25 +8,26 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Medication
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,217 +41,191 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kelompok.anemom.alarm.AlarmTimeText
+import com.kelompok.anemom.data.repository.TtdDay
+import com.kelompok.anemom.data.repository.TtdStatus
+import com.kelompok.anemom.data.repository.TtdTrackerData
+import com.kelompok.anemom.data.repository.TtdWeek
 import com.kelompok.anemom.ui.AppViewModelProvider
 import com.kelompok.anemom.ui.components.AnemomCard
 import com.kelompok.anemom.ui.components.AnemomChip
-import com.kelompok.anemom.ui.components.AnemomScreen
+import com.kelompok.anemom.ui.components.AnemomTabHeader
 import com.kelompok.anemom.ui.components.GradientButton
 import com.kelompok.anemom.ui.theme.AmberBg
 import com.kelompok.anemom.ui.theme.AmberText
 import com.kelompok.anemom.ui.theme.CardBorder
+import com.kelompok.anemom.ui.theme.ErrorRed
 import com.kelompok.anemom.ui.theme.GreenBg
 import com.kelompok.anemom.ui.theme.GreenText
 import com.kelompok.anemom.ui.theme.Maroon
 import com.kelompok.anemom.ui.theme.MutedText
 import com.kelompok.anemom.ui.theme.Pink100
 import com.kelompok.anemom.ui.theme.Pink500
+import com.kelompok.anemom.ui.theme.RedBg
 import com.kelompok.anemom.util.DateFormats
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+private val indonesian = Locale.forLanguageTag("id-ID")
 private val dayLabels = listOf("S", "S", "R", "K", "J", "S", "M") // Senin - Minggu
-private val monthTitleFormat = DateTimeFormatter.ofPattern("MMMM yyyy", Locale("id", "ID"))
+private val monthTitleFormat = DateTimeFormatter.ofPattern("MMMM yyyy", indonesian)
+private val dayMonth = DateTimeFormatter.ofPattern("d MMM", indonesian)
+private val dayOnly = DateTimeFormatter.ofPattern("d", indonesian)
+private val BarLight = Color(0xFFF4A6C0)
 
-/**
- * Tab TTD: pelacak minum Tablet Tambah Darah.
- *
- * TODO(fitur): pengingat sungguhan (notifikasi terjadwal / FCM). Saat ini tombol "Pengingat aktif"
- * hanya menyimpan statusnya, dan jam pengingat tetap 20.00.
- */
+/** Tab TTD: Pelacak TTD. Alarm harian diatur di Pengaturan pengingat ("Edit" membuka Ubah jam alarm). */
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun TtdScreen(
     onBack: () -> Unit,
+    onEditAlarm: () -> Unit = {},
     viewModel: TtdViewModel = viewModel(factory = AppViewModelProvider.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    AnemomScreen(
-        title = "Pelacak TTD",
-        subtitle = "Satu tablet, satu langkah lebih sehat",
-        onBack = onBack
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
     ) {
-        // Kartu TTD hari ini
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(Pink100)
-                .padding(18.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color.White),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Medication,
-                        contentDescription = null,
-                        tint = Pink500,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-                Spacer(Modifier.width(14.dp))
-                Column {
-                    Text(
-                        text = "TTD hari ini",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Maroon
-                    )
-                    Text(
-                        text = "${DateFormats.short(state.today)} · Pukul 20.00",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MutedText
-                    )
-                }
-            }
+        AnemomTabHeader(title = "Pelacak TTD", subtitle = "Satu tablet, satu langkah lebih sehat")
+        Spacer(Modifier.height(16.dp))
+
+        val data = state.data
+        if (data == null) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 48.dp),
+                contentAlignment = Alignment.Center
+            ) { CircularProgressIndicator(color = Pink500) }
+        } else {
+            TodayCard(data, onEditAlarm)
             Spacer(Modifier.height(14.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = if (state.reminderOn) "Pengingat aktif · Setelah makan" else "Pengingat nonaktif",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = Maroon,
-                    modifier = Modifier.weight(1f)
-                )
-                Switch(
-                    checked = state.reminderOn,
-                    onCheckedChange = viewModel::setReminder,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = Pink500,
-                        uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = MutedText.copy(alpha = 0.4f),
-                        uncheckedBorderColor = Color.Transparent
-                    )
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            if (state.takenToday) {
-                AnemomChip(text = "Sudah diminum", containerColor = GreenBg, contentColor = GreenText)
-            } else {
-                AnemomChip(text = "Belum diminum", containerColor = AmberBg, contentColor = AmberText)
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-        GradientButton(
-            text = if (state.takenToday) "TTD hari ini sudah ditandai" else "Tandai sudah minum TTD",
-            onClick = viewModel::markTakenToday,
-            enabled = !state.takenToday,
-            icon = Icons.Filled.Check
-        )
-
-        Spacer(Modifier.height(14.dp))
-        AnemomCard(Modifier.fillMaxWidth()) {
-            CalendarHeader(
-                month = state.month,
-                onPrevious = viewModel::previousMonth,
-                onNext = viewModel::nextMonth
+            val today = data.today
+            GradientButton(
+                text = if (today.status == TtdStatus.SUDAH) {
+                    "Sudah dicatat · ${AlarmTimeText.timeWithZone(today.time)}"
+                } else {
+                    "Tandai sudah minum TTD"
+                },
+                onClick = viewModel::markTakenToday,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = today.status != TtdStatus.SUDAH && !state.isMarking,
+                isLoading = state.isMarking,
+                icon = Icons.Filled.Check
             )
-            Spacer(Modifier.height(8.dp))
-            CalendarGrid(
-                month = state.month,
-                today = state.today,
-                takenDates = state.takenDates
-            )
+
+            Spacer(Modifier.height(14.dp))
+            AnemomCard(Modifier.fillMaxWidth()) {
+                CalendarHeader(data.month, viewModel::previousMonth, viewModel::nextMonth)
+                Spacer(Modifier.height(8.dp))
+                CalendarGrid(data.month, LocalDate.now(), data.takenDates, data.skippedDates)
+                Spacer(Modifier.height(12.dp))
+                CalendarLegend()
+            }
+
+            Spacer(Modifier.height(14.dp))
+            WeeklyChart(data)
+
+            Spacer(Modifier.height(20.dp))
+            History(data)
+
             Spacer(Modifier.height(12.dp))
-            CalendarLegend()
-        }
-
-        Spacer(Modifier.height(20.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "Riwayat minum TTD",
-                style = MaterialTheme.typography.titleMedium,
-                color = Maroon,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = "${state.takenLast7Days}/7 hari · ${state.percentLast7Days}%",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = Pink500
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-
-        if (state.history.isEmpty()) {
-            Text(
-                text = "Belum ada catatan. Tekan \"Tandai sudah minum TTD\" setelah Bunda minum tablet.",
+                text = "Ikuti dosis dari tenaga kesehatan. Hindari teh atau kopi berdekatan dengan waktu minum TTD.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MutedText
             )
-        } else {
-            state.history.take(5).forEach { entry ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.CheckCircle,
-                        contentDescription = null,
-                        tint = GreenText,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = "${DateFormats.short(entry.date)} · ${DateFormats.time(entry.time)}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Maroon,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = "Diminum",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = GreenText
-                    )
-                }
+            Spacer(Modifier.height(12.dp))
+            AnemomCard(Modifier.fillMaxWidth(), containerColor = Pink100.copy(alpha = 0.75f)) {
+                Text(
+                    text = "Sudah: dikonfirmasi diminum. Belum: dilaporkan belum diminum. " +
+                        "Belum Dikonfirmasi: belum ada jawaban.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Maroon
+                )
             }
         }
-
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Ikuti dosis dari tenaga kesehatan. Hindari teh atau kopi berdekatan dengan waktu minum TTD.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MutedText
-        )
+        Spacer(Modifier.height(24.dp))
     }
 }
 
 @Composable
-private fun CalendarHeader(
-    month: YearMonth,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+private fun TodayCard(data: TtdTrackerData, onEditAlarm: () -> Unit) {
+    val today = data.today
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(Pink100)
+            .border(1.dp, CardBorder, RoundedCornerShape(24.dp))
+            .padding(18.dp)
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.White),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Outlined.Medication, contentDescription = null, tint = Pink500, modifier = Modifier.size(28.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("TTD hari ini", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Maroon)
+                Text(
+                    text = "${DateFormats.short(today.date)} · Pukul ${AlarmTimeText.timeWithZone(data.reminderTime)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MutedText
+                )
+            }
+            AnemomChip(
+                text = "Edit",
+                containerColor = AmberBg,
+                contentColor = Maroon,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .clickable(onClickLabel = "Ubah jam alarm", onClick = onEditAlarm)
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(if (data.reminderOn) "Alarm aktif" else "Alarm nonaktif", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = Maroon)
+        Spacer(Modifier.height(8.dp))
+        StatusChip(today.status)
+    }
+}
+
+@Composable
+private fun StatusChip(status: TtdStatus) {
+    when (status) {
+        TtdStatus.SUDAH -> AnemomChip(status.label, containerColor = GreenBg, contentColor = GreenText)
+        TtdStatus.BELUM -> AnemomChip(status.label, containerColor = RedBg, contentColor = ErrorRed)
+        TtdStatus.BELUM_DIKONFIRMASI -> AnemomChip(status.label, containerColor = AmberBg, contentColor = AmberText)
+    }
+}
+
+private fun statusColor(status: TtdStatus): Color = when (status) {
+    TtdStatus.SUDAH -> GreenText
+    TtdStatus.BELUM -> ErrorRed
+    TtdStatus.BELUM_DIKONFIRMASI -> Pink500
+}
+
+@Composable
+private fun CalendarHeader(month: YearMonth, onPrevious: () -> Unit, onNext: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onPrevious) {
             Icon(Icons.Filled.ChevronLeft, contentDescription = "Bulan sebelumnya", tint = Pink500)
         }
         Text(
             text = month.format(monthTitleFormat),
             style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
             color = Maroon,
             textAlign = TextAlign.Center,
             modifier = Modifier.weight(1f)
@@ -265,43 +240,32 @@ private fun CalendarHeader(
 private fun CalendarGrid(
     month: YearMonth,
     today: LocalDate,
-    takenDates: Set<LocalDate>
+    takenDates: Set<LocalDate>,
+    skippedDates: Set<LocalDate>
 ) {
     // Minggu dimulai dari Senin: Senin = 0 ... Minggu = 6
     val leadingBlanks = month.atDay(1).dayOfWeek.value - 1
     val cells: List<Int?> = List(leadingBlanks) { null } + (1..month.lengthOfMonth()).toList()
-    val rows = cells.chunked(7)
 
-    Row(modifier = Modifier.fillMaxWidth()) {
-        dayLabels.forEach { label ->
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MutedText,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f)
-            )
+    Row(Modifier.fillMaxWidth()) {
+        dayLabels.forEach {
+            Text(it, style = MaterialTheme.typography.labelMedium, color = MutedText, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
         }
     }
     Spacer(Modifier.height(6.dp))
-
-    rows.forEach { week ->
-        Row(modifier = Modifier.fillMaxWidth()) {
+    cells.chunked(7).forEach { week ->
+        Row(Modifier.fillMaxWidth()) {
             repeat(7) { column ->
                 val day = week.getOrNull(column)
                 Box(
-                    modifier = Modifier
+                    Modifier
                         .weight(1f)
                         .padding(2.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     if (day != null) {
                         val date = month.atDay(day)
-                        DayCell(
-                            day = day,
-                            isToday = date == today,
-                            isTaken = date in takenDates
-                        )
+                        DayCell(day, isToday = date == today, isTaken = date in takenDates, isSkipped = date in skippedDates)
                     } else {
                         Spacer(Modifier.size(36.dp))
                     }
@@ -312,22 +276,28 @@ private fun CalendarGrid(
 }
 
 @Composable
-private fun DayCell(day: Int, isToday: Boolean, isTaken: Boolean) {
+private fun DayCell(day: Int, isToday: Boolean, isTaken: Boolean, isSkipped: Boolean) {
     val background = when {
-        isToday -> Pink500
+        isToday && isTaken -> Pink500
         isTaken -> Pink100
         else -> Color.Transparent
     }
+    val border = when {
+        isToday && !isTaken -> Pink500
+        isSkipped -> ErrorRed.copy(alpha = 0.5f)
+        else -> Color.Transparent
+    }
     val textColor = when {
-        isToday -> Color.White
-        isTaken -> Pink500
+        isToday && isTaken -> Color.White
+        isTaken || isToday -> Pink500
         else -> Maroon
     }
     Box(
         modifier = Modifier
             .size(36.dp)
             .clip(CircleShape)
-            .background(background),
+            .background(background)
+            .border(1.5.dp, border, CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -343,12 +313,13 @@ private fun DayCell(day: Int, isToday: Boolean, isTaken: Boolean) {
 private fun CalendarLegend() {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        LegendItem(label = "Diminum", color = Pink100, borderColor = Pink500.copy(alpha = 0.4f))
-        LegendItem(label = "Hari ini", color = Pink500, borderColor = Pink500)
-        LegendItem(label = "Belum dijadwalkan", color = Color.Transparent, borderColor = CardBorder)
+        LegendItem("Diminum", Pink100, Pink500)
+        LegendItem("Hari ini", Color.Transparent, Pink500)
+        LegendItem("Belum", Color.Transparent, ErrorRed.copy(alpha = 0.5f))
+        LegendItem("Belum dijadwalkan", Color.Transparent, CardBorder)
     }
 }
 
@@ -356,17 +327,117 @@ private fun CalendarLegend() {
 private fun LegendItem(label: String, color: Color, borderColor: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
-            modifier = Modifier
-                .size(10.dp)
+            Modifier
+                .size(9.dp)
                 .clip(CircleShape)
                 .background(color)
                 .border(1.dp, borderColor, CircleShape)
         )
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(5.dp))
+        Text(label, fontSize = 10.sp, color = MutedText)
+    }
+}
+
+/** Kepatuhan 4 minggu terakhir; batang terakhir = 7 hari terakhir. */
+@Composable
+private fun WeeklyChart(data: TtdTrackerData) {
+    val last = data.weeks.last()
+    AnemomCard(Modifier.fillMaxWidth()) {
+        Text("Kepatuhan mingguan (%)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Maroon)
+        Spacer(Modifier.height(8.dp))
         Text(
-            text = label,
-            fontSize = 10.sp,
+            text = "${data.summary.takenLast7Days} dari 7 jadwal terpenuhi · ${data.summary.percentLast7Days}%",
+            style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp),
+            fontWeight = FontWeight.Bold,
+            color = Pink500
+        )
+        Text(
+            text = "${rangeText(last)} · 7 hari terakhir",
+            style = MaterialTheme.typography.bodySmall,
             color = MutedText
+        )
+        Spacer(Modifier.height(16.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(150.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            data.weeks.forEachIndexed { index, week ->
+                val isLast = index == data.weeks.lastIndex
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Bottom
+                ) {
+                    Text("${week.percent}%", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Maroon)
+                    Spacer(Modifier.height(6.dp))
+                    Box(
+                        Modifier
+                            .width(36.dp)
+                            .height((100 * week.percent / 100f).coerceAtLeast(4f).dp)
+                            .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                            .background(if (isLast) Pink500 else BarLight)
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "${week.start.format(dayOnly)}–${week.end.format(dayMonth)}",
+                        fontSize = 9.sp,
+                        color = MutedText,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text("0–100% · Jumlah Sudah ÷ jadwal × 100", style = MaterialTheme.typography.labelSmall, color = MutedText)
+    }
+}
+
+private fun rangeText(week: TtdWeek): String =
+    "${week.start.format(dayMonth)}–${DateFormats.short(week.end)}"
+
+@Composable
+private fun History(data: TtdTrackerData) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = "Riwayat minum TTD",
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+            fontWeight = FontWeight.Bold,
+            color = Maroon,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = "${data.summary.takenLast7Days}/7 · ${data.summary.percentLast7Days}%",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = Pink500
+        )
+    }
+    Spacer(Modifier.height(6.dp))
+    data.last7Days.forEach { day -> HistoryRow(day) }
+}
+
+@Composable
+private fun HistoryRow(day: TtdDay) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "${day.date.format(dayMonth)} · ${AlarmTimeText.time(day.time)}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Maroon,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = day.status.label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = statusColor(day.status)
         )
     }
 }

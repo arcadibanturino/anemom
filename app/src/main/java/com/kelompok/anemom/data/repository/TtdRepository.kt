@@ -1,92 +1,207 @@
 package com.kelompok.anemom.data.repository
 
+import com.kelompok.anemom.alarm.TtdAlarmScheduler
 import com.kelompok.anemom.data.AppEvents
-import com.kelompok.anemom.data.model.TtdEntry
 import com.kelompok.anemom.data.remote.ApiService
 import com.kelompok.anemom.data.remote.apiCall
 import com.kelompok.anemom.data.remote.dto.TtdDayDto
+import com.kelompok.anemom.data.remote.dto.TtdMonthDto
 import com.kelompok.anemom.data.remote.dto.TtdSettingsRequest
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
 
-/** Data TTD untuk satu bulan yang sedang ditampilkan di kalender. */
-data class TtdMonthData(
-    val month: YearMonth,
-    /** Hari minum pada [month] (untuk kalender). */
-    val entries: List<TtdEntry>,
-    /** Riwayat terbaru: untuk bulan ini sudah digabung dengan bulan sebelumnya. */
-    val history: List<TtdEntry>,
-    val takenToday: Boolean,
+/** Status satu hari jadwal TTD. */
+enum class TtdStatus(val label: String) {
+    /** Dikonfirmasi sudah diminum. */
+    SUDAH("Sudah"),
+    /** Dilaporkan belum diminum (dari alarm). */
+    BELUM("Belum"),
+    /** Belum ada jawaban. */
+    BELUM_DIKONFIRMASI("Belum Dikonfirmasi")
+}
+
+data class TtdDay(
+    val date: LocalDate,
+    val status: TtdStatus,
+    /** Jam catatan; untuk "Belum Dikonfirmasi" = jam alarm. */
+    val time: LocalTime
+)
+
+/** Kepatuhan satu jendela 7 hari (grafik "Kepatuhan mingguan"). */
+data class TtdWeek(
+    val start: LocalDate,
+    val end: LocalDate,
+    val taken: Int,
+    val percent: Int
+)
+
+/** Ringkasan 7 hari terakhir (hari ini + 6 hari sebelumnya), dihitung server. */
+data class TtdSummary(
     val takenLast7Days: Int,
-    val percentLast7Days: Int
+    val percentLast7Days: Int,
+    val takenToday: Boolean
+)
+
+/** Pengaturan pengingat dari server. */
+data class TtdReminderSettings(
+    val time: LocalTime,
+    val on: Boolean,
+    /** false = Hb lab terakhir di bawah normal: pengingat wajib aktif. */
+    val canDisable: Boolean
+)
+
+/** Isi layar Pelacak TTD. */
+data class TtdTrackerData(
+    /** Bulan kalender yang ditampilkan. */
+    val month: YearMonth,
+    val takenDates: Set<LocalDate>,
+    val skippedDates: Set<LocalDate>,
+    val today: TtdDay,
+    /** Hari ini dulu, 7 hari. */
+    val last7Days: List<TtdDay>,
+    /** 4 minggu, terlama dulu; terakhir = 7 hari terakhir. */
+    val weeks: List<TtdWeek>,
+    val summary: TtdSummary,
+    val reminderTime: LocalTime,
+    val reminderOn: Boolean
 )
 
 /**
- * Catatan minum Tablet Tambah Darah (TTD) dari server (GET /ttd, POST /ttd/take, /ttd/settings).
- * Kepatuhan 7 hari dihitung server.
- *
- * TODO(fitur): pengingat sungguhan (notifikasi terjadwal / FCM); saat ini hanya status aktif/tidaknya
- * dan jamnya yang disimpan di server.
+ * Catatan minum Tablet Tambah Darah (TTD) dari server: GET /ttd, POST /ttd/take, POST /ttd/skip,
+ * GET/PUT /ttd/settings. Kepatuhan 7 hari dihitung server ("Sudah" ÷ 7 jadwal × 100).
+ * Jam alarm di HP ([TtdAlarmScheduler]) ikut diperbarui dari data server.
  */
 class TtdRepository(
     private val api: ApiService,
-    private val events: AppEvents
+    private val events: AppEvents,
+    private val alarm: TtdAlarmScheduler
 ) {
-    private val settings = RemoteSource(events) { apiCall { api.ttdSettings() } }
-
-    val reminderOn: Flow<Boolean> = settings.flow.map { it.reminderOn }
-
     /**
-     * Data satu bulan. Mengikuti [AppEvents.dataVersion]: setelah menandai TTD, data diambil ulang.
-     * Gunakan di ViewModel dengan flatMapLatest pada bulan yang dipilih.
+     * Data Pelacak TTD dengan kalender bulan [month]. Mengikuti [AppEvents.dataVersion]:
+     * setelah menandai TTD, data diambil ulang.
      */
-    fun month(month: YearMonth): Flow<TtdMonthData> =
-        RemoteSource(events) { loadMonth(month) }.flow
+    fun tracker(month: YearMonth): Flow<TtdTrackerData> = RemoteSource(events) { loadTracker(month) }.flow
 
-    private suspend fun loadMonth(month: YearMonth): Result<TtdMonthData> = coroutineScope {
-        val current = async { apiCall { api.ttdMonth(month.toString()) } }
-        // Untuk bulan berjalan, ambil juga bulan lalu supaya riwayat tidak kosong di tanggal 1.
-        val previous = if (month == YearMonth.now()) {
-            async { apiCall { api.ttdMonth(month.minusMonths(1).toString()) } }
-        } else {
-            null
+    private suspend fun loadTracker(month: YearMonth): Result<TtdTrackerData> = coroutineScope {
+        val today = LocalDate.now()
+        val current = YearMonth.from(today)
+        // Bulan ini + bulan lalu selalu dimuat: cukup untuk riwayat 7 hari dan grafik 4 minggu.
+        val months = linkedSetOf(month, current, current.minusMonths(1))
+        val calls = months.associateWith { m -> async { apiCall { api.ttdMonth(m.toString()) } } }
+        val settingsCall = async { settings() }
+
+        val results = calls.mapValues { it.value.await() }
+        val selected = results.getValue(month).getOrElse { return@coroutineScope Result.failure(it) }
+        val currentDto = results.getValue(current).getOrElse { return@coroutineScope Result.failure(it) }
+
+        val settings = settingsCall.await().getOrNull()
+        val reminderTime = settings?.time ?: alarm.reminderTime
+        val reminderOn = settings?.on ?: alarm.reminderOn
+        val records = results.values.mapNotNull { it.getOrNull() }.flatMap { it.toDays() }.associateBy { it.date }
+
+        fun dayOf(date: LocalDate) = records[date] ?: TtdDay(date, TtdStatus.BELUM_DIKONFIRMASI, reminderTime)
+
+        val last7 = (0L until 7L).map { dayOf(today.minusDays(it)) }
+        val weeks = (3 downTo 0).map { w ->
+            val end = today.minusDays(7L * w)
+            val start = end.minusDays(6)
+            val taken = (0L until 7L).count { records[start.plusDays(it)]?.status == TtdStatus.SUDAH }
+            TtdWeek(start, end, taken, Math.round(taken * 100f / 7))
         }
-        val currentResult = current.await()
-        val previousDays = previous?.await()?.getOrNull()?.days.orEmpty()
+        val summary = TtdSummary(currentDto.takenLast7Days, currentDto.percentLast7Days, currentDto.takenToday)
 
-        currentResult.map { dto ->
-            val entries = dto.days.mapNotNull { it.toEntry() }
-            TtdMonthData(
+        // Samakan alarm di HP dengan server.
+        if (alarm.isEnabled && (alarm.reminderTime != reminderTime || alarm.reminderOn != reminderOn)) {
+            alarm.update(reminderTime, reminderOn)
+        }
+        if (summary.takenToday && !alarm.isTakenToday()) alarm.markTaken(today)
+
+        val selectedDays = selected.toDays()
+        Result.success(
+            TtdTrackerData(
                 month = month,
-                entries = entries,
-                history = (entries + previousDays.mapNotNull { it.toEntry() })
-                    .sortedWith(compareByDescending<TtdEntry> { it.date }.thenByDescending { it.time }),
-                takenToday = dto.takenToday,
-                takenLast7Days = dto.takenLast7Days,
-                percentLast7Days = dto.percentLast7Days
+                takenDates = selectedDays.filter { it.status == TtdStatus.SUDAH }.map { it.date }.toSet(),
+                skippedDates = selectedDays.filter { it.status == TtdStatus.BELUM }.map { it.date }.toSet(),
+                today = last7.first(),
+                last7Days = last7,
+                weeks = weeks,
+                summary = summary,
+                reminderTime = reminderTime,
+                reminderOn = reminderOn
             )
-        }
+        )
     }
 
-    /** Tandai sudah minum hari ini (server memakai tanggal/jam saat ini). Gagal -> Toast dari [AppEvents]. */
+    /** Ringkasan 7 hari terakhir (dipakai layar alarm). */
+    suspend fun summary(): Result<TtdSummary> =
+        apiCall { api.ttdMonth(YearMonth.now().toString()) }
+            .map { TtdSummary(it.takenLast7Days, it.percentLast7Days, it.takenToday) }
+
+    /** Tandai sudah minum hari ini (server memakai tanggal/jam saat ini). Alarm hari ini dihentikan. */
     suspend fun markTakenToday(): Result<Unit> =
         apiCall { api.ttdTake() }
-            .map { events.invalidateData() }
+            .map {
+                alarm.markTaken()
+                events.invalidateData()
+            }
             .onFailure { events.showMessage(it.message ?: "Gagal menyimpan catatan TTD.") }
 
-    suspend fun setReminder(on: Boolean): Result<Unit> =
+    /** Laporan "Belum diminum" dari alarm. Tidak menambah kepatuhan. */
+    suspend fun markNotTakenToday(): Result<Unit> =
+        apiCall { api.ttdSkip() }.map { events.invalidateData() }
+
+    /** Pengaturan pengingat dari server (jam, nyala/mati, boleh dimatikan atau tidak). */
+    suspend fun settings(): Result<TtdReminderSettings> =
+        apiCall { api.ttdSettings() }.map { it.toSettings() }
+
+    /** Ubah jam alarm harian di server, lalu pasang ulang alarm di HP. */
+    suspend fun setReminderTime(time: LocalTime): Result<TtdReminderSettings> =
+        apiCall {
+            api.updateTtdSettings(TtdSettingsRequest(reminderTime = "%02d:%02d".format(time.hour, time.minute)))
+        }.map { dto ->
+            dto.toSettings().also {
+                alarm.update(it.time, it.on)
+                events.invalidateData()
+            }
+        }
+
+    /**
+     * Nyalakan/matikan pengingat. Server menolak mematikan bila Hb terakhir di bawah normal
+     * (pesan galatnya siap ditampilkan).
+     */
+    suspend fun setReminderOn(on: Boolean): Result<TtdReminderSettings> =
         apiCall { api.updateTtdSettings(TtdSettingsRequest(reminderOn = on)) }
-            .map { events.invalidateData() }
-            .onFailure { events.showMessage(it.message ?: "Gagal mengubah pengingat.") }
+            .map { dto ->
+                dto.toSettings().also {
+                    alarm.update(it.time, it.on)
+                    events.invalidateData()
+                }
+            }
+
+    /** Pasang alarm dari pengaturan server; bila offline, pakai yang tersimpan di HP. */
+    suspend fun syncAlarm() {
+        settings()
+            .onSuccess { alarm.update(it.time, it.on) }
+            .onFailure { if (alarm.isEnabled) alarm.restore() else alarm.update(alarm.reminderTime) }
+    }
 }
 
-private fun TtdDayDto.toEntry(): TtdEntry? {
+private fun parseTime(value: String): LocalTime? = runCatching { LocalTime.parse(value) }.getOrNull()
+
+private fun com.kelompok.anemom.data.remote.dto.TtdSettingsDto.toSettings() = TtdReminderSettings(
+    time = parseTime(reminderTime) ?: TtdAlarmScheduler.DEFAULT_TIME,
+    on = reminderOn,
+    canDisable = canDisable
+)
+
+private fun TtdMonthDto.toDays(): List<TtdDay> =
+    days.mapNotNull { it.toDay(TtdStatus.SUDAH) } + skipped.mapNotNull { it.toDay(TtdStatus.BELUM) }
+
+private fun TtdDayDto.toDay(status: TtdStatus): TtdDay? {
     val d = runCatching { LocalDate.parse(date) }.getOrNull() ?: return null
-    val t = runCatching { LocalTime.parse(time) }.getOrDefault(LocalTime.of(20, 0))
-    return TtdEntry(date = d, time = t)
+    return TtdDay(d, status, parseTime(time) ?: LocalTime.of(19, 0))
 }

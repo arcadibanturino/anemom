@@ -97,7 +97,7 @@ final class AccountController
         $birth = $v->date('birth_date', false, true);
         $facility = $v->string('health_facility', 1, 150, false);
         $height = $v->number('height_cm', 100, 220, false);
-        $weight = $v->number('pre_pregnancy_weight_kg', 25, 200, false);
+        $weight = $v->number('pre_pregnancy_weight_kg', 30, 200, false);   // sama dengan PUT /me/health-profile
         $gravida = $v->int('gravida', 1, 20, false);
         $v->check();
 
@@ -212,7 +212,8 @@ final class AccountController
     {
         $u = Db::one(
             'SELECT u.id, u.name, u.email, u.role, u.created_at,
-                    p.hpht, p.birth_date, p.health_facility, p.height_cm, p.pre_pregnancy_weight_kg, p.gravida
+                    p.hpht, p.birth_date, p.health_facility, p.height_cm, p.pre_pregnancy_weight_kg, p.gravida,
+                    p.anemia_history, p.allergy_status, p.lila_cm
              FROM users u JOIN mother_profiles p ON p.user_id = u.id WHERE u.id = ?',
             [$uid]
         );
@@ -223,6 +224,8 @@ final class AccountController
             'email' => $u['email'],
             'role' => $u['role'],
             'created_at' => Time::iso($u['created_at']),
+            // false = langkah 2 pendaftaran (Profil Kesehatan Awal) belum selesai; app mengarahkan ke layar itu.
+            'profile_completed' => HealthProfileController::isComplete($u),
             'profile' => [
                 'hpht' => $u['hpht'],
                 'birth_date' => $u['birth_date'],
@@ -230,6 +233,9 @@ final class AccountController
                 'height_cm' => $u['height_cm'] === null ? null : (float)$u['height_cm'],
                 'pre_pregnancy_weight_kg' => $u['pre_pregnancy_weight_kg'] === null ? null : (float)$u['pre_pregnancy_weight_kg'],
                 'gravida' => $u['gravida'] === null ? null : (int)$u['gravida'],
+                'anemia_history' => $u['anemia_history'],
+                'allergy_status' => $u['allergy_status'],
+                'lila_cm' => $u['lila_cm'] === null ? null : (float)$u['lila_cm'],
             ],
             'pregnancy' => [
                 'week' => $weeks,

@@ -41,10 +41,17 @@ final class NutritionController
      * Rekomendasi bahan makanan untuk Beranda dan layar "Lihat Semua".
      * Hanya bahan dengan is_recommended = 1. Kosong sampai kelompok mengisi data berdasarkan rujukan gizi.
      * Bahan dengan pregnancy_warning tetap dikirim (app yang memutuskan ditampilkan sebagai peringatan).
+     * Bahan yang dicentang ibu sebagai alergi (user_allergies) TIDAK dikirim.
      */
     public static function recommendations(Request $req): never
     {
-        $rows = Db::all('SELECT * FROM ingredients WHERE is_recommended = 1 ORDER BY recommend_order, name LIMIT 100');
+        $rows = Db::all(
+            'SELECT i.* FROM ingredients i
+             WHERE i.is_recommended = 1
+               AND NOT EXISTS (SELECT 1 FROM user_allergies a WHERE a.user_id = ? AND a.ingredient_id = i.id)
+             ORDER BY i.recommend_order, i.name LIMIT 100',
+            [$req->userId()]
+        );
         Response::data(array_map([self::class, 'ingredientFmt'], $rows), 200, ['count' => count($rows)]);
     }
 
@@ -190,11 +197,27 @@ final class NutritionController
         return Time::dayRangeUtc($date);
     }
 
+    /**
+     * Kelompok tampilan di aplikasi (tab Sayur / Buah / Protein): satu-satunya tempat pemetaannya.
+     * Kolom `category` di database tidak diubah; hewani dan nabati sama-sama Protein,
+     * minuman dan lainnya masuk "lainnya".
+     */
+    public static function groupOf(string $category): string
+    {
+        return match ($category) {
+            'sayur' => 'sayur',
+            'buah' => 'buah',
+            'hewani', 'nabati' => 'protein',
+            default => 'lainnya',
+        };
+    }
+
     private static function ingredientFmt(array $r): array
     {
         $n = fn($x) => $x === null ? null : (float)$x;
         return [
             'id' => (int)$r['id'], 'name' => $r['name'], 'category' => $r['category'],
+            'group' => self::groupOf($r['category']),
             'description' => $r['description'], 'iron_type' => $r['iron_type'],
             'serving_desc' => $r['serving_desc'], 'serving_grams' => (float)$r['serving_grams'],
             'calories_kcal' => $n($r['calories_kcal']), 'protein_g' => $n($r['protein_g']), 'iron_mg' => $n($r['iron_mg']),

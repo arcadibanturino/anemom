@@ -11,6 +11,7 @@ foreach (glob(__DIR__ . '/../src/Controllers/*.php') as $f) {
 use Anemom\ApiException;
 use Anemom\Controllers\AccountController as A;
 use Anemom\Controllers\HealthController as H;
+use Anemom\Controllers\HealthProfileController as HP;
 use Anemom\Controllers\NutritionController as N;
 use Anemom\Controllers\ScreeningController as S;
 use Anemom\Controllers\SystemController as Sys;
@@ -44,6 +45,8 @@ $r->add('POST', "$P/auth/login", [A::class, 'login'], false);
 $r->add('POST',   "$P/auth/logout", [A::class, 'logout']);
 $r->add('GET',    "$P/me", [A::class, 'me']);
 $r->add('PUT',    "$P/me", [A::class, 'updateMe']);
+$r->add('GET',    "$P/me/health-profile", [HP::class, 'show']);
+$r->add('PUT',    "$P/me/health-profile", [HP::class, 'update']);
 $r->add('PUT',    "$P/me/password", [A::class, 'changePassword']);
 $r->add('DELETE', "$P/me", [A::class, 'deleteMe']);
 $r->add('GET',    "$P/consents", [A::class, 'consents']);

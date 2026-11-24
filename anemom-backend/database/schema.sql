@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS mother_profiles (
   health_facility VARCHAR(150) NULL,                     -- puskesmas/RS langganan
   height_cm      DECIMAL(4,1) NULL,
   pre_pregnancy_weight_kg DECIMAL(4,1) NULL,
+  anemia_history ENUM('ya','tidak','tidak_tahu') NULL,   -- layar Profil Kesehatan Awal
+  allergy_status ENUM('ada','tidak','tidak_tahu') NULL,  -- 'ada' = daftar bahan ada di user_allergies
+  lila_cm        DECIMAL(3,1) NULL,                      -- lingkar lengan atas, opsional
   gravida        TINYINT UNSIGNED NULL,                  -- jumlah kehamilan
   photo_path     VARCHAR(255) NULL,
   updated_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -112,8 +115,9 @@ CREATE TABLE IF NOT EXISTS ai_models (
   id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
   name       VARCHAR(60) NOT NULL,
   task       ENUM('eye_segmentation','eye_anemia_cls','ppg_hb','food_cls') NOT NULL,
+  architecture VARCHAR(30) NULL,                          -- unet, yolov8n-seg, random_forest, ... (untuk perbandingan)
   version    VARCHAR(20) NOT NULL,
-  runtime    ENUM('tflite','yolov8_server','sklearn_server') NOT NULL,
+  runtime    ENUM('tflite','yolov8_server','unet_server','sklearn_server') NOT NULL,
   file_path  VARCHAR(255) NULL,
   metrics    JSON NULL,                                   -- akurasi, F1, dataset, dll.
   is_active  TINYINT(1) NOT NULL DEFAULT 0,
@@ -202,7 +206,7 @@ CREATE TABLE IF NOT EXISTS hb_results (
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
--- 7. SKRINING (AI Scan Mata / PPG Band) + antrean inferensi YOLO di VPS
+-- 7. SKRINING (AI Scan Mata / PPG Band) + antrean inferensi layanan AI di VPS (U-Net / YOLO)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS inference_jobs (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -239,7 +243,8 @@ CREATE TABLE IF NOT EXISTS screenings (
   confidence       DECIMAL(4,3) NULL,
   image_id         BIGINT UNSIGNED NULL,
   ppg_session_id   BIGINT UNSIGNED NULL,
-  model_id         INT UNSIGNED NULL,
+  model_id         INT UNSIGNED NULL,                     -- model KLASIFIKASI (anemia / non_anemia)
+  seg_model_id     INT UNSIGNED NULL,                     -- model SEGMENTASI konjungtiva (U-Net / YOLO); NULL untuk PPG
   inference_source ENUM('on_device','server') NULL,
   inference_job_id BIGINT UNSIGNED NULL,
   matched_hb_result_id BIGINT UNSIGNED NULL,              -- tautan ke hasil lab untuk validasi model
@@ -254,6 +259,7 @@ CREATE TABLE IF NOT EXISTS screenings (
   CONSTRAINT fk_scr_image FOREIGN KEY (image_id)       REFERENCES images(id)        ON DELETE SET NULL,
   CONSTRAINT fk_scr_ppg   FOREIGN KEY (ppg_session_id) REFERENCES ppg_sessions(id)  ON DELETE SET NULL,
   CONSTRAINT fk_scr_model FOREIGN KEY (model_id)       REFERENCES ai_models(id)     ON DELETE SET NULL,
+  CONSTRAINT fk_scr_seg_model FOREIGN KEY (seg_model_id) REFERENCES ai_models(id)   ON DELETE SET NULL,
   CONSTRAINT fk_scr_job   FOREIGN KEY (inference_job_id) REFERENCES inference_jobs(id) ON DELETE SET NULL,
   CONSTRAINT fk_scr_hb    FOREIGN KEY (matched_hb_result_id) REFERENCES hb_results(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
@@ -315,6 +321,17 @@ CREATE TABLE IF NOT EXISTS ingredients (
   UNIQUE KEY uq_ingredient_name (name),
   KEY idx_ingredient_cat (category),
   KEY idx_ingredient_reco (is_recommended, recommend_order)
+) ENGINE=InnoDB;
+
+-- Bahan makanan yang dicentang ibu sebagai alergi (langkah 2 pendaftaran). Dipakai untuk menyaring rekomendasi.
+CREATE TABLE IF NOT EXISTS user_allergies (
+  user_id       BIGINT UNSIGNED NOT NULL,
+  ingredient_id INT UNSIGNED NOT NULL,
+  created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, ingredient_id),
+  KEY idx_allergy_ingredient (ingredient_id),
+  CONSTRAINT fk_allergy_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_allergy_ingredient FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS food_logs (

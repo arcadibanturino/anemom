@@ -14,7 +14,7 @@ Diuji di MariaDB 10.11; ditulis agar jalan juga di MySQL 8.
 | Foto dan sinyal PPG mentah di **disk VPS**, DB hanya menyimpan jalur + metadata | Gambar/sinyal besar memperlambat dan menggemukkan DB. |
 | `images` dipakai bersama (foto mata dan makanan) | Satu mekanisme unggah, satu aturan izin, satu kebijakan hapus. |
 | Hasil skrining (`screenings`) terpisah dari hasil lab (`hb_results`) | Estimasi AI/PPG **bukan** hasil lab. Kolom `matched_hb_result_id` mengaitkannya untuk mengukur akurasi model dan menjadi label pelatihan. |
-| `inference_source` = `on_device` / `server` + tabel `inference_jobs` | Mendukung rencana dosen: AI di HP, dengan YOLO di VPS sebagai cadangan. Job gagal dicoba ulang lewat `bin/process_jobs.php`. |
+| `inference_source` = `on_device` / `server` + tabel `inference_jobs` | Mendukung rencana dosen: AI di HP, dengan layanan AI mata di VPS (`ml-service/`) sebagai cadangan. Segmentasi memakai U-Net (YOLOv8 disiapkan untuk perbandingan); `screenings.seg_model_id` mencatat model segmentasi, `screenings.model_id` model klasifikasi. Job gagal dicoba ulang lewat `bin/process_jobs.php`. |
 | `ai_models` (versi, runtime, metrik, aktif) | Setiap hasil mencatat model dan versi yang menghasilkannya; model bisa diganti tanpa merilis ulang. |
 | `consents` (jenis, versi, waktu) + `images.use_for_training` | Data kesehatan itu sensitif. Foto hanya boleh dipakai melatih model jika ada persetujuan `research_use`. |
 | Token sesi disimpan sebagai hash SHA-256 | Jika DB bocor, token tidak bisa dipakai. |
@@ -49,7 +49,7 @@ erDiagram
     users ||--o{ images : "foto"
     users ||--o{ ppg_sessions : "sesi PPG"
     users ||--o{ screenings : "skrining"
-    users ||--o{ inference_jobs : "antrean YOLO"
+    users ||--o{ inference_jobs : "antrean AI mata"
     users ||--|| ttd_settings : "pengaturan"
     users ||--o{ ttd_logs : "minum TTD"
     users ||--o{ food_logs : "catatan makan"

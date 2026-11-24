@@ -48,6 +48,26 @@ android {
         buildConfig = true
     }
 
+    // Model segmentasi konjungtiva: satu kode, dua varian (lihat README-PEMISAHAN.md).
+    //   unetDebug / unetRelease : U-Net (dipakai sekarang)
+    //   yoloDebug / yoloRelease : YOLOv8 (eksperimen perbandingan; bisa terpasang berdampingan)
+    flavorDimensions += "segmenter"
+    productFlavors {
+        create("unet") {
+            dimension = "segmenter"
+        }
+        create("yolo") {
+            dimension = "segmenter"
+            applicationIdSuffix = ".yolo"
+            versionNameSuffix = "-yolo"
+        }
+    }
+
+    // Model .tflite di-map langsung dari APK, jadi tidak boleh dikompres.
+    androidResources {
+        noCompress += "tflite"
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -89,6 +109,15 @@ dependencies {
 
     // Memuat gambar dari server (foto bahan makanan)
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // Kamera untuk AI Scan Mata
+    val cameraxVersion = "1.4.2"
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
+
+    // Menjalankan model .tflite (U-Net) di HP. LiteRT = nama baru TensorFlow Lite (paket org.tensorflow.lite).
+    implementation("com.google.ai.edge.litert:litert:1.4.2")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

@@ -3,7 +3,11 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- TODO(fitur): tambahkan izin CAMERA untuk AI Scan Mata dan Bluetooth untuk integrasi band/PPG -->
+    <!-- AI Scan Mata. required=false: aplikasi tetap bisa dipasang di perangkat tanpa kamera belakang. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- TODO(fitur): tambahkan izin Bluetooth untuk integrasi band/PPG -->
 
     <application
         android:name=".AnemomApp"

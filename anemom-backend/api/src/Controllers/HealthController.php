@@ -106,12 +106,16 @@ final class HealthController
         }
         $uid = $req->userId();
         $rows = Db::all(
-            'SELECT taken_date, taken_time FROM ttd_logs WHERE user_id = ? AND taken_date BETWEEN ? AND LAST_DAY(?) ORDER BY taken_date',
+            'SELECT taken_date, taken_time, status FROM ttd_logs WHERE user_id = ? AND taken_date BETWEEN ? AND LAST_DAY(?) ORDER BY taken_date',
             [$uid, "$month-01", "$month-01"]
         );
+        $fmt = fn($r) => ['date' => $r['taken_date'], 'time' => substr($r['taken_time'], 0, 5)];
+        // days = hari "Sudah" (diminum); skipped = hari yang dilaporkan "Belum diminum" dari alarm.
+        // Hari tanpa catatan = "Belum dikonfirmasi" (dihitung aplikasi).
         Response::data([
             'month' => $month,
-            'days' => array_map(fn($r) => ['date' => $r['taken_date'], 'time' => substr($r['taken_time'], 0, 5)], $rows),
+            'days' => array_values(array_map($fmt, array_filter($rows, fn($r) => $r['status'] === 'sudah'))),
+            'skipped' => array_values(array_map($fmt, array_filter($rows, fn($r) => $r['status'] === 'belum'))),
         ] + self::ttdSummary($uid));
     }
 
@@ -122,11 +126,34 @@ final class HealthController
         $time = $v->time('time') ?? (new \DateTimeImmutable('now', Time::tz()))->format('H:i:s');
         $v->check();
         $uid = $req->userId();
-        $created = Db::run('INSERT IGNORE INTO ttd_logs (user_id, taken_date, taken_time) VALUES (?,?,?)', [$uid, $date, $time]) > 0;
+        // Laporan "Belum" pada hari yang sama diganti "Sudah"; catatan "Sudah" yang ada tidak diubah.
+        $created = Db::run(
+            "INSERT INTO ttd_logs (user_id, taken_date, taken_time, status) VALUES (?,?,?,'sudah')
+             ON DUPLICATE KEY UPDATE taken_time = IF(status = 'belum', VALUES(taken_time), taken_time), status = 'sudah'",
+            [$uid, $date, $time]
+        ) > 0;
         $row = Db::one('SELECT taken_date, taken_time FROM ttd_logs WHERE user_id = ? AND taken_date = ?', [$uid, $date]);
         Response::data(
             ['date' => $row['taken_date'], 'time' => substr($row['taken_time'], 0, 5), 'created' => $created] + self::ttdSummary($uid),
             $created ? 201 : 200
+        );
+    }
+
+    /**
+     * Laporan "Belum diminum" dari alarm. Tidak menambah kepatuhan; tidak menimpa catatan "Sudah".
+     * Body opsional: date (YYYY-MM-DD), time (HH:mm). Default: sekarang.
+     */
+    public static function ttdSkip(Request $req): never
+    {
+        $v = new Validator($req->body);
+        $date = $v->date('date', false, true) ?? Time::today();
+        $time = $v->time('time') ?? (new \DateTimeImmutable('now', Time::tz()))->format('H:i:s');
+        $v->check();
+        $uid = $req->userId();
+        Db::run("INSERT IGNORE INTO ttd_logs (user_id, taken_date, taken_time, status) VALUES (?,?,?,'belum')", [$uid, $date, $time]);
+        $row = Db::one('SELECT taken_date, taken_time, status FROM ttd_logs WHERE user_id = ? AND taken_date = ?', [$uid, $date]);
+        Response::data(
+            ['date' => $row['taken_date'], 'time' => substr($row['taken_time'], 0, 5), 'status' => $row['status']] + self::ttdSummary($uid)
         );
     }
 
@@ -149,6 +176,13 @@ final class HealthController
         $time = $v->time('reminder_time');
         $v->check();
         $uid = $req->userId();
+        if ($on === false && self::reminderLocked($uid)) {
+            throw new ApiException(
+                422, 'reminder_locked',
+                'Hb terakhir Bunda di bawah normal, jadi pengingat TTD wajib aktif.',
+                ['reminder_on' => 'Pengingat TTD tidak bisa dimatikan selama Hb terakhir di bawah normal.']
+            );
+        }
         if ($on !== null) {
             Db::run('UPDATE ttd_settings SET reminder_on = ? WHERE user_id = ?', [$on ? 1 : 0, $uid]);
         }
@@ -161,8 +195,29 @@ final class HealthController
     private static function settingsFmt(int $uid): array
     {
         $r = Db::one('SELECT reminder_on, reminder_time FROM ttd_settings WHERE user_id = ?', [$uid])
-            ?? ['reminder_on' => 1, 'reminder_time' => '20:00:00'];
-        return ['reminder_on' => (bool)$r['reminder_on'], 'reminder_time' => substr($r['reminder_time'], 0, 5)];
+            ?? ['reminder_on' => 1, 'reminder_time' => '19:00:00'];
+        $locked = self::reminderLocked($uid);
+        // Hb turun saat pengingat mati -> pengingat dinyalakan lagi (wajib).
+        if ($locked && (int)$r['reminder_on'] === 0) {
+            Db::run('UPDATE ttd_settings SET reminder_on = 1 WHERE user_id = ?', [$uid]);
+            $r['reminder_on'] = 1;
+        }
+        return [
+            'reminder_on' => (bool)$r['reminder_on'],
+            'reminder_time' => substr($r['reminder_time'], 0, 5),
+            // false = Hb lab terakhir di bawah normal: pengingat wajib aktif.
+            'can_disable' => !$locked,
+        ];
+    }
+
+    /** Pengingat TTD wajib aktif bila hasil Hb lab terakhir bukan 'normal' (risiko sedang/tinggi). */
+    public static function reminderLocked(int $uid): bool
+    {
+        $hb = Db::one(
+            'SELECT risk FROM hb_results WHERE user_id = ? AND deleted_at IS NULL ORDER BY test_date DESC, id DESC LIMIT 1',
+            [$uid]
+        );
+        return $hb !== null && $hb['risk'] !== 'normal';
     }
 
     /** Kepatuhan 7 hari terakhir (hari ini + 6 hari sebelumnya), sama dengan aplikasi. */
@@ -170,8 +225,11 @@ final class HealthController
     {
         $today = Time::today();
         $from = (new \DateTimeImmutable($today))->modify('-6 days')->format('Y-m-d');
-        $n = (int)Db::one('SELECT COUNT(*) c FROM ttd_logs WHERE user_id = ? AND taken_date BETWEEN ? AND ?', [$uid, $from, $today])['c'];
-        $takenToday = Db::one('SELECT 1 FROM ttd_logs WHERE user_id = ? AND taken_date = ?', [$uid, $today]) !== null;
+        $n = (int)Db::one(
+            "SELECT COUNT(*) c FROM ttd_logs WHERE user_id = ? AND status = 'sudah' AND taken_date BETWEEN ? AND ?",
+            [$uid, $from, $today]
+        )['c'];
+        $takenToday = Db::one("SELECT 1 FROM ttd_logs WHERE user_id = ? AND taken_date = ? AND status = 'sudah'", [$uid, $today]) !== null;
         return ['taken_today' => $takenToday, 'taken_last_7_days' => $n, 'percent_last_7_days' => (int)round($n * 100 / 7)];
     }
 

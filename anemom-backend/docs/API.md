@@ -54,8 +54,9 @@ Base URL: `https://<domain-vps>/api/v1`. Format JSON (UTF-8). Waktu dalam ISO 86
 
 | Metode | Path | Keterangan |
 |---|---|---|
-| GET | `/ttd?month=YYYY-MM` | Hari yang sudah minum + `taken_today, taken_last_7_days, percent_last_7_days` |
-| POST | `/ttd/take` | `[date, time]`, default hari ini. Dua kali di hari sama: 200 `created:false` |
+| GET | `/ttd?month=YYYY-MM` | `days` = hari "Sudah", `skipped` = hari dilaporkan "Belum" (dari alarm), + `taken_today, taken_last_7_days, percent_last_7_days` (hanya menghitung "Sudah"). Hari tanpa catatan = "Belum dikonfirmasi" |
+| POST | `/ttd/take` | `[date, time]`, default hari ini. Mengganti laporan "Belum" di hari yang sama. Dua kali "Sudah": 200 `created:false` |
+| POST | `/ttd/skip` | Laporan "Belum diminum" dari alarm, `[date, time]`. Tidak menimpa "Sudah" dan tidak menambah kepatuhan |
 | DELETE | `/ttd/{YYYY-MM-DD}` | Batalkan tanda |
 | GET / PUT | `/ttd/settings` | `reminder_on, reminder_time` |
 
@@ -93,16 +94,22 @@ Base URL: `https://<domain-vps>/api/v1`. Format JSON (UTF-8). Waktu dalam ISO 86
 | DELETE | `/food-logs/{id}` | |
 | GET | `/articles`, `/articles/{slug}` | Hanya artikel yang sudah terbit |
 
+`meta` pada `/recommendations` dan `/ingredients/{id}` = konteks ibu untuk menyesuaikan saran: `risk`, `risk_label` (Hb lab terakhir, `null` jika belum ada), `allergy_status` (`ada`/`tidak`/`tidak_tahu`/`null`), `allergens` (nama bahan alergi yang dikecualikan).
+
+`has_detail` = `benefit` terisi; aplikasi menampilkan "Lihat Detail" hanya untuk bahan ini. Teks detail: `key_nutrients` (sorotan), `benefit` (Manfaat Nutrisi), `preparation` (Cara memilih & menyiapkan), `allergy_note` (bagian alergi; kalimat risiko ditambahkan aplikasi dari `meta.risk`).
+
 `group` = kelompok tampilan di aplikasi: `sayur`, `buah`, `protein` (hewani + nabati), atau `lainnya` (minuman dst.). Dihitung server dari `category` (`NutritionController::groupOf`); kolom `category` tidak berubah.
 
-Bentuk satu bahan: `id, name, category, group, description, iron_type (heme/non_heme), serving_desc, serving_grams, calories_kcal, protein_g, iron_mg, vitamin_c_mg, folate_mcg, is_iron_booster, is_iron_inhibitor, is_recommended, recommend_order, pregnancy_warning, reference, image_url`. Semua nilai gizi per **satu porsi** (`serving_desc`).
+Bentuk satu bahan: `id, name, category, group, subcategory_label, description, iron_type (heme/non_heme), key_nutrients, benefit, preparation, allergy_note, has_detail, serving_desc, serving_grams, calories_kcal, protein_g, iron_mg, vitamin_c_mg, folate_mcg, is_iron_booster, is_iron_inhibitor, is_recommended, recommend_order, pregnancy_warning, reference, image_url`. Semua nilai gizi per **satu porsi** (`serving_desc`).
 
 ## Notifikasi
 
 | Metode | Path | Keterangan |
 |---|---|---|
 | POST / DELETE | `/fcm-tokens` | `token, [device_name]` |
-| GET | `/notifications` | |
+| GET | `/notifications` | Terbaru dulu. Item: `id, type, title, body, scheduled_at, sent_at, read_at`. `type` = `ttd_reminder`, `ttd_done`, `hb_reminder`, `checkup`, `info`. `meta.unread` = belum dibaca. Sebelum menjawab, server membuat pengingat yang berlaku (`Notifier::sync`, lihat `src/Services.php`) |
+| GET | `/notifications/unread-count` | `{unread}` untuk titik merah di Beranda (juga menjalankan `Notifier::sync`) |
+| PUT | `/notifications/read-all` | Tandai semua dibaca. `{marked, unread: 0}` |
 | PUT | `/notifications/{id}/read` | |
 
 ## Kontrak layanan AI mata di VPS (proses Python terpisah `ml-service/`, hanya localhost)

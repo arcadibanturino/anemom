@@ -10,14 +10,17 @@
 -- Hati ayam/sapi: is_recommended = 0 sampai ada keputusan tenaga kesehatan (Kemenkes menyebutnya sumber zat besi,
 -- NHS menyarankan ibu hamil menghindarinya karena vitamin A).
 -- Aman dijalankan ulang (ON DUPLICATE KEY UPDATE).
+-- Nama mengikuti desain 25 Nov (Ayam, Telur, Ikan rendah merkuri, Pepaya matang); teks kartu/detail
+-- dan bahan tambahan ada di migrations/2026-11-25_detail_bahan_makanan.sql: jalankan migrasi itu SESUDAH berkas ini
+-- (berkas ini menimpa deskripsi dengan teks lama).
 USE anemom;
 INSERT INTO ingredients
  (name, category, iron_type, description, serving_desc, serving_grams, is_iron_booster, is_iron_inhibitor,
   is_recommended, recommend_order, pregnancy_warning, reference) VALUES
  ('Daging sapi', 'hewani', 'heme', 'Besi heme dari pangan hewani lebih mudah diserap. Pastikan dimasak matang.', 'porsi', 100, 0, 0, 1, 10, NULL, 'Kemenkes RI, Buku Tablet Tambah Darah (promkes.kemkes.go.id)'),
- ('Daging ayam', 'hewani', 'heme', 'Besi heme dari pangan hewani lebih mudah diserap. Pastikan dimasak matang.', 'porsi', 100, 0, 0, 1, 11, NULL, 'Kemenkes RI, Buku Tablet Tambah Darah (promkes.kemkes.go.id)'),
- ('Ikan segar', 'hewani', 'heme', 'Besi heme dari pangan hewani lebih mudah diserap. Pastikan dimasak matang.', 'porsi', 100, 0, 0, 1, 12, NULL, 'Kemenkes RI, Buku Tablet Tambah Darah (promkes.kemkes.go.id)'),
- ('Telur ayam', 'hewani', 'heme', 'Besi heme dari pangan hewani lebih mudah diserap. Pastikan dimasak matang.', 'porsi', 100, 0, 0, 1, 13, NULL, 'Daftar umum sumber zat besi (detik.com, alodokter.com); belum diverifikasi ke TKPI'),
+ ('Ayam', 'hewani', 'heme', 'Besi heme dari pangan hewani lebih mudah diserap. Pastikan dimasak matang.', 'porsi', 100, 0, 0, 1, 11, NULL, 'Kemenkes RI, Buku Tablet Tambah Darah (promkes.kemkes.go.id)'),
+ ('Ikan rendah merkuri', 'hewani', 'heme', 'Besi heme dari pangan hewani lebih mudah diserap. Pastikan dimasak matang.', 'porsi', 100, 0, 0, 1, 12, NULL, 'Kemenkes RI, Buku Tablet Tambah Darah (promkes.kemkes.go.id)'),
+ ('Telur', 'hewani', 'heme', 'Besi heme dari pangan hewani lebih mudah diserap. Pastikan dimasak matang.', 'porsi', 100, 0, 0, 1, 13, NULL, 'Daftar umum sumber zat besi (detik.com, alodokter.com); belum diverifikasi ke TKPI'),
  ('Telur bebek', 'hewani', 'heme', 'Besi heme dari pangan hewani lebih mudah diserap. Pastikan dimasak matang.', 'porsi', 100, 0, 0, 1, 14, NULL, 'Daftar umum sumber zat besi (detik.com, alodokter.com); belum diverifikasi ke TKPI'),
  ('Udang', 'hewani', 'heme', 'Besi heme dari pangan hewani lebih mudah diserap. Pastikan dimasak matang.', 'porsi', 100, 0, 0, 1, 15, NULL, 'Daftar umum sumber zat besi (detik.com, alodokter.com); belum diverifikasi ke TKPI'),
  ('Ikan teri', 'hewani', 'heme', 'Besi heme dari pangan hewani lebih mudah diserap. Pastikan dimasak matang.', 'porsi', 100, 0, 0, 1, 16, NULL, 'Daftar umum sumber zat besi (detik.com, alodokter.com); belum diverifikasi ke TKPI'),
@@ -34,7 +37,7 @@ INSERT INTO ingredients
  ('Kacang merah', 'nabati', 'non_heme', 'Besi nabati; padukan dengan buah kaya vitamin C agar lebih terserap.', 'porsi', 100, 0, 0, 1, 43, NULL, 'Daftar umum sumber zat besi (detik.com, alodokter.com); belum diverifikasi ke TKPI'),
  ('Kacang hijau', 'nabati', 'non_heme', 'Besi nabati; padukan dengan buah kaya vitamin C agar lebih terserap.', 'porsi', 100, 0, 0, 1, 44, NULL, 'Daftar umum sumber zat besi (detik.com, alodokter.com); belum diverifikasi ke TKPI'),
  ('Jeruk', 'buah', 'non_heme', 'Kaya vitamin C, membantu penyerapan zat besi. Cocok dimakan bersama menu zat besi.', 'porsi', 100, 1, 0, 1, 60, NULL, 'Kemenkes RI, Buku Tablet Tambah Darah (promkes.kemkes.go.id)'),
- ('Pepaya', 'buah', 'non_heme', 'Kaya vitamin C, membantu penyerapan zat besi. Cocok dimakan bersama menu zat besi.', 'porsi', 100, 1, 0, 1, 61, NULL, 'Kemenkes RI, Buku Tablet Tambah Darah (promkes.kemkes.go.id)'),
+ ('Pepaya matang', 'buah', 'non_heme', 'Kaya vitamin C, membantu penyerapan zat besi. Cocok dimakan bersama menu zat besi.', 'porsi', 100, 1, 0, 1, 61, NULL, 'Kemenkes RI, Buku Tablet Tambah Darah (promkes.kemkes.go.id)'),
  ('Mangga', 'buah', 'non_heme', 'Kaya vitamin C, membantu penyerapan zat besi. Cocok dimakan bersama menu zat besi.', 'porsi', 100, 1, 0, 1, 62, NULL, 'Kemenkes RI, Buku Tablet Tambah Darah (promkes.kemkes.go.id)'),
  ('Jambu biji', 'buah', 'non_heme', 'Kaya vitamin C, membantu penyerapan zat besi. Cocok dimakan bersama menu zat besi.', 'porsi', 100, 1, 0, 1, 63, NULL, 'Kemenkes RI, Buku Tablet Tambah Darah (promkes.kemkes.go.id)'),
  ('Teh', 'minuman', NULL, 'Menghambat penyerapan zat besi. Beri jeda sekitar 2 jam dari TTD dan menu zat besi.', 'porsi', 100, 0, 1, 0, 100, NULL, 'Kemenkes RI, Buku Tablet Tambah Darah (promkes.kemkes.go.id)'),

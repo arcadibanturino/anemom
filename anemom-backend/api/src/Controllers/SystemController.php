@@ -5,6 +5,7 @@ namespace Anemom\Controllers;
 
 use Anemom\ApiException;
 use Anemom\Db;
+use Anemom\Notifier;
 use Anemom\Domain;
 use Anemom\Env;
 use Anemom\Inference;
@@ -65,16 +66,33 @@ final class SystemController
         Response::data(['removed' => true]);
     }
 
+    /**
+     * Notifikasi ibu, terbaru dulu. Sebelum dibaca, Notifier::sync() menambahkan pengingat yang berlaku hari ini.
+     * Item: id, type (ttd_reminder | ttd_done | hb_reminder | checkup | info), title, body, scheduled_at, read_at.
+     * meta.unread = jumlah belum dibaca (untuk titik merah di Beranda).
+     */
     public static function notifications(Request $req): never
     {
+        $uid = $req->userId();
+        Notifier::sync($uid);
         $rows = Db::all(
-            'SELECT id, type, title, body, scheduled_at, sent_at, read_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ' . HealthController::limit($req, 50),
-            [$req->userId()]
+            'SELECT id, type, title, body, scheduled_at, sent_at, read_at FROM notifications
+             WHERE user_id = ? AND scheduled_at <= UTC_TIMESTAMP()
+             ORDER BY scheduled_at DESC, id DESC LIMIT ' . HealthController::limit($req, 50),
+            [$uid]
         );
         Response::data(array_map(fn($r) => [
             'id' => (int)$r['id'], 'type' => $r['type'], 'title' => $r['title'], 'body' => $r['body'],
             'scheduled_at' => Time::iso($r['scheduled_at']), 'sent_at' => Time::iso($r['sent_at']), 'read_at' => Time::iso($r['read_at']),
-        ], $rows));
+        ], $rows), 200, ['unread' => Notifier::unread($uid)]);
+    }
+
+    /** Jumlah notifikasi belum dibaca (titik merah di ikon Beranda). */
+    public static function notificationUnread(Request $req): never
+    {
+        $uid = $req->userId();
+        Notifier::sync($uid);
+        Response::data(['unread' => Notifier::unread($uid)]);
     }
 
     public static function notificationRead(Request $req): never
@@ -82,5 +100,15 @@ final class SystemController
         $n = Db::run('UPDATE notifications SET read_at = UTC_TIMESTAMP() WHERE id = ? AND user_id = ? AND read_at IS NULL', [$req->intParam('id'), $req->userId()]);
         $n > 0 || throw new ApiException(404, 'not_found', 'Notifikasi tidak ditemukan atau sudah dibaca.');
         Response::data(['read' => true]);
+    }
+
+    /** "Tandai semua dibaca". */
+    public static function notificationReadAll(Request $req): never
+    {
+        $n = Db::run(
+            'UPDATE notifications SET read_at = UTC_TIMESTAMP() WHERE user_id = ? AND read_at IS NULL AND scheduled_at <= UTC_TIMESTAMP()',
+            [$req->userId()]
+        );
+        Response::data(['marked' => $n, 'unread' => 0]);
     }
 }

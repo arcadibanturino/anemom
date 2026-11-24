@@ -255,3 +255,116 @@ final class Router
         throw new ApiException(404, 'not_found', 'Endpoint tidak ditemukan.');
     }
 }
+
+/**
+ * Notifikasi untuk layar Notifikasi di aplikasi. Belum ada cron/FCM, jadi notifikasi dibuat saat dibutuhkan:
+ * setiap aplikasi meminta GET /notifications atau /notifications/unread-count, sync() mengecek kondisi ibu
+ * dan menambahkan notifikasi yang belum ada. dedupe_key + UNIQUE (user_id, dedupe_key) mencegah duplikat.
+ *
+ *  - ttd_reminder : pengingat TTD hari ini (jika pengingat aktif dan TTD hari ini belum dicatat).
+ *                   Otomatis ditandai dibaca setelah TTD hari itu dicatat.
+ *  - ttd_done     : "Hebat, TTD sudah dicatat!" untuk catatan 3 hari terakhir (langsung berstatus dibaca).
+ *  - hb_reminder  : belum ada hasil Hb, atau hasil terakhir lebih lama dari HB_REMINDER_DAYS.
+ *  - checkup/info : disiapkan untuk jadwal kontrol/pengumuman (belum ada sumber datanya).
+ */
+final class Notifier
+{
+    /** Jarak (hari) sejak Hb terakhir sebelum muncul pengingat. Ubah sesuai arahan bidan/dosen. */
+    public const HB_REMINDER_DAYS = 30;
+
+    private const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+    public static function sync(int $uid): void
+    {
+        $today = Time::today();
+        $now = Time::now();
+        $tz = Time::tz();
+        $utc = new \DateTimeZone('UTC');
+
+        // 1. Pengingat TTD hari ini
+        $set = Db::one('SELECT reminder_on, reminder_time FROM ttd_settings WHERE user_id = ?', [$uid])
+            ?? ['reminder_on' => 1, 'reminder_time' => '19:00:00'];
+        if (\Anemom\Controllers\HealthController::reminderLocked($uid)) {
+            $set['reminder_on'] = 1;
+        }
+        $takenToday = Db::one("SELECT 1 FROM ttd_logs WHERE user_id = ? AND taken_date = ? AND status = 'sudah'", [$uid, $today]) !== null;
+        $ttdKey = 'ttd:' . $today;
+        if ($takenToday) {
+            Db::run(
+                'UPDATE notifications SET read_at = ? WHERE user_id = ? AND dedupe_key = ? AND read_at IS NULL',
+                [$now, $uid, $ttdKey]
+            );
+        } elseif ((int)$set['reminder_on'] === 1) {
+            $time = substr((string)$set['reminder_time'], 0, 5);
+            $evening = $time >= '15:00';
+            self::add(
+                $uid, 'ttd_reminder', $ttdKey,
+                $evening ? 'TTD malam ini, Bunda' : 'TTD hari ini, Bunda',
+                'Jadwal TTD pukul ' . str_replace(':', '.', $time) . ' setelah makan. Pastikan pengingat Bunda tetap aktif, ya.',
+                $now
+            );
+        }
+
+        // 2. TTD sudah dicatat (3 hari terakhir), langsung dibaca supaya tidak memunculkan titik merah
+        $from = (new \DateTimeImmutable($today, $tz))->modify('-2 days')->format('Y-m-d');
+        foreach (Db::all("SELECT taken_date, taken_time FROM ttd_logs WHERE user_id = ? AND taken_date >= ? AND status = 'sudah'", [$uid, $from]) as $log) {
+            $at = (new \DateTimeImmutable($log['taken_date'] . ' ' . $log['taken_time'], $tz))->setTimezone($utc)->format('Y-m-d H:i:s');
+            self::add(
+                $uid, 'ttd_done', 'ttd_done:' . $log['taken_date'],
+                'Hebat, TTD sudah dicatat!',
+                'Bunda sudah minum TTD pada ' . self::dateText($log['taken_date']) . '. Lanjutkan kebiasaan baik ini setiap hari.',
+                $at,
+                $now
+            );
+        }
+
+        // 3. Pengingat periksa Hb
+        $last = Db::one(
+            'SELECT test_date FROM hb_results WHERE user_id = ? AND deleted_at IS NULL ORDER BY test_date DESC, id DESC LIMIT 1',
+            [$uid]
+        );
+        if ($last === null) {
+            self::add(
+                $uid, 'hb_reminder', 'hb:none',
+                'Saatnya periksa Hb darah',
+                'Belum ada hasil Hb yang tercatat. Periksa Hb di puskesmas atau laboratorium, lalu catat hasilnya. AI dan PPG tidak menggantikan tes darah.',
+                $now
+            );
+        } else {
+            $days = (int)(new \DateTimeImmutable($last['test_date'], $tz))->diff(new \DateTimeImmutable($today, $tz))->format('%a');
+            if ($days >= self::HB_REMINDER_DAYS) {
+                self::add(
+                    $uid, 'hb_reminder', 'hb:after:' . $last['test_date'],
+                    'Saatnya periksa Hb darah',
+                    'Pemeriksaan Hb terakhir pada ' . self::dateText($last['test_date']) . '. Diskusikan jadwal periksa berikutnya dengan bidan. AI dan PPG tidak menggantikan tes darah.',
+                    $now
+                );
+            }
+        }
+    }
+
+    public static function unread(int $uid): int
+    {
+        return (int)Db::one(
+            'SELECT COUNT(*) c FROM notifications WHERE user_id = ? AND read_at IS NULL AND scheduled_at <= UTC_TIMESTAMP()',
+            [$uid]
+        )['c'];
+    }
+
+    private static function add(
+        int $uid, string $type, string $key, string $title, string $body, string $atUtc, ?string $readAtUtc = null
+    ): void {
+        Db::run(
+            'INSERT IGNORE INTO notifications (user_id, type, title, body, dedupe_key, scheduled_at, sent_at, read_at)
+             VALUES (?,?,?,?,?,?,?,?)',
+            [$uid, $type, $title, $body, $key, $atUtc, $atUtc, $readAtUtc]
+        );
+    }
+
+    /** '2026-11-03' -> '3 Nov 2026' */
+    private static function dateText(string $ymd): string
+    {
+        [$y, $m, $d] = array_map('intval', explode('-', $ymd));
+        return $d . ' ' . self::MONTHS[$m - 1] . ' ' . $y;
+    }
+}

@@ -270,7 +270,7 @@ CREATE TABLE IF NOT EXISTS screenings (
 CREATE TABLE IF NOT EXISTS ttd_settings (
   user_id       BIGINT UNSIGNED NOT NULL,
   reminder_on   TINYINT(1) NOT NULL DEFAULT 1,
-  reminder_time TIME NOT NULL DEFAULT '20:00:00',
+  reminder_time TIME NOT NULL DEFAULT '19:00:00',
   updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (user_id),
   CONSTRAINT fk_ttdset_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -282,6 +282,7 @@ CREATE TABLE IF NOT EXISTS ttd_logs (
   user_id     BIGINT UNSIGNED NOT NULL,
   taken_date  DATE NOT NULL,
   taken_time  TIME NOT NULL,
+  status      ENUM('sudah','belum') NOT NULL DEFAULT 'sudah', -- belum = dilaporkan belum diminum dari alarm
   created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_ttd_day (user_id, taken_date),
@@ -299,7 +300,12 @@ CREATE TABLE IF NOT EXISTS ingredients (
   id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
   name          VARCHAR(120) NOT NULL,
   category      ENUM('hewani','nabati','sayur','buah','minuman','lainnya') NOT NULL DEFAULT 'lainnya',
-  description   TEXT NULL,                                -- keterangan singkat / cara konsumsi
+  subcategory_label VARCHAR(60) NULL,                     -- label kecil di detail, mis. "Sayuran hijau"
+  description   TEXT NULL,                                -- keterangan singkat (teks kartu di daftar)
+  key_nutrients VARCHAR(80) NULL,                         -- judul sorotan di detail, mis. "Folat & zat besi non-heme"
+  benefit       TEXT NULL,                                -- detail: Manfaat Nutrisi (NULL = belum ada halaman detail)
+  preparation   TEXT NULL,                                -- detail: Cara memilih & menyiapkan
+  allergy_note  TEXT NULL,                                -- detail: bagian alergi di "Sesuai risiko & alergi"
   iron_type     ENUM('heme','non_heme') NULL,             -- besi heme (hewani) vs non-heme (nabati)
   serving_desc  VARCHAR(60) NOT NULL DEFAULT '100 g',
   serving_grams DECIMAL(6,1) NOT NULL DEFAULT 100,
@@ -395,9 +401,10 @@ CREATE TABLE IF NOT EXISTS fcm_tokens (
 CREATE TABLE IF NOT EXISTS notifications (
   id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id      BIGINT UNSIGNED NOT NULL,
-  type         ENUM('ttd_reminder','hb_reminder','info') NOT NULL,
+  type         ENUM('ttd_reminder','ttd_done','hb_reminder','checkup','info') NOT NULL,
   title        VARCHAR(120) NOT NULL,
   body         VARCHAR(255) NOT NULL,
+  dedupe_key   VARCHAR(60) NULL,                        -- notifikasi otomatis (Notifier), mis. 'ttd:2026-11-25'
   scheduled_at DATETIME NOT NULL,
   sent_at      DATETIME NULL,
   read_at      DATETIME NULL,
@@ -405,6 +412,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   PRIMARY KEY (id),
   KEY idx_notif_due (sent_at, scheduled_at),
   KEY idx_notif_user (user_id, created_at),
+  UNIQUE KEY uq_notif_dedupe (user_id, dedupe_key),
   CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 

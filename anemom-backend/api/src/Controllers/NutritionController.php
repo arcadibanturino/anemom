@@ -5,6 +5,7 @@ namespace Anemom\Controllers;
 
 use Anemom\ApiException;
 use Anemom\Db;
+use Anemom\Domain;
 use Anemom\Request;
 use Anemom\Response;
 use Anemom\Time;
@@ -30,11 +31,12 @@ final class NutritionController
         Response::data($rows, 200, ['count' => count($rows)]);
     }
 
+    /** Satu bahan (layar Detail Bahan Makanan). meta = konteks ibu, sama seperti /recommendations. */
     public static function ingredient(Request $req): never
     {
         $r = Db::one('SELECT * FROM ingredients WHERE id = ?', [$req->intParam('id')]);
         $r ?? throw new ApiException(404, 'not_found', 'Bahan makanan tidak ditemukan.');
-        Response::data(self::ingredientFmt($r));
+        Response::data(self::ingredientFmt($r), 200, self::motherContext($req->userId()));
     }
 
     /**
@@ -42,17 +44,53 @@ final class NutritionController
      * Hanya bahan dengan is_recommended = 1. Kosong sampai kelompok mengisi data berdasarkan rujukan gizi.
      * Bahan dengan pregnancy_warning tetap dikirim (app yang memutuskan ditampilkan sebagai peringatan).
      * Bahan yang dicentang ibu sebagai alergi (user_allergies) TIDAK dikirim.
+     * meta berisi konteks ibu untuk kartu "Sesuai kebutuhan Bunda" (lihat motherContext).
      */
     public static function recommendations(Request $req): never
     {
+        $uid = $req->userId();
         $rows = Db::all(
             'SELECT i.* FROM ingredients i
              WHERE i.is_recommended = 1
                AND NOT EXISTS (SELECT 1 FROM user_allergies a WHERE a.user_id = ? AND a.ingredient_id = i.id)
              ORDER BY i.recommend_order, i.name LIMIT 100',
-            [$req->userId()]
+            [$uid]
         );
-        Response::data(array_map([self::class, 'ingredientFmt'], $rows), 200, ['count' => count($rows)]);
+        Response::data(
+            array_map([self::class, 'ingredientFmt'], $rows),
+            200,
+            ['count' => count($rows)] + self::motherContext($uid)
+        );
+    }
+
+    /**
+     * Konteks ibu untuk menyesuaikan saran makanan:
+     *  risk / risk_label  = kategori Hb lab terakhir (null = belum ada hasil Hb),
+     *  allergy_status     = ada | tidak | tidak_tahu | null (dari Profil Kesehatan Awal),
+     *  allergens          = nama bahan yang dicentang sebagai alergi (sudah dikecualikan dari rekomendasi).
+     */
+    private static function motherContext(int $uid): array
+    {
+        $hb = Db::one(
+            'SELECT risk FROM hb_results WHERE user_id = ? AND deleted_at IS NULL ORDER BY test_date DESC, id DESC LIMIT 1',
+            [$uid]
+        );
+        $profile = Db::one('SELECT allergy_status FROM mother_profiles WHERE user_id = ?', [$uid]);
+        $allergens = array_column(
+            Db::all(
+                'SELECT i.name FROM user_allergies a JOIN ingredients i ON i.id = a.ingredient_id
+                 WHERE a.user_id = ? ORDER BY i.name',
+                [$uid]
+            ),
+            'name'
+        );
+        $risk = $hb['risk'] ?? null;
+        return [
+            'risk' => $risk,
+            'risk_label' => $risk === null ? null : Domain::riskLabel($risk),
+            'allergy_status' => $profile['allergy_status'] ?? null,
+            'allergens' => $allergens,
+        ];
     }
 
     /** Gambar bahan (publik, bukan data pribadi) supaya bisa dimuat oleh pemuat gambar tanpa token. */
@@ -212,13 +250,33 @@ final class NutritionController
         };
     }
 
+    /** Label cadangan bila subcategory_label kosong. */
+    private static function subcategoryOf(string $category): string
+    {
+        return match ($category) {
+            'sayur' => 'Sayuran',
+            'buah' => 'Buah',
+            'hewani' => 'Protein hewani',
+            'nabati' => 'Protein nabati',
+            'minuman' => 'Minuman',
+            default => 'Bahan makanan',
+        };
+    }
+
     private static function ingredientFmt(array $r): array
     {
         $n = fn($x) => $x === null ? null : (float)$x;
+        $t = fn(string $k) => isset($r[$k]) && trim((string)$r[$k]) !== '' ? trim((string)$r[$k]) : null;
+        $benefit = $t('benefit');
         return [
             'id' => (int)$r['id'], 'name' => $r['name'], 'category' => $r['category'],
             'group' => self::groupOf($r['category']),
+            'subcategory_label' => $t('subcategory_label') ?? self::subcategoryOf($r['category']),
             'description' => $r['description'], 'iron_type' => $r['iron_type'],
+            // Detail bahan; has_detail = ada isi "Manfaat Nutrisi" (aplikasi menampilkan "Lihat Detail").
+            'key_nutrients' => $t('key_nutrients'), 'benefit' => $benefit,
+            'preparation' => $t('preparation'), 'allergy_note' => $t('allergy_note'),
+            'has_detail' => $benefit !== null,
             'serving_desc' => $r['serving_desc'], 'serving_grams' => (float)$r['serving_grams'],
             'calories_kcal' => $n($r['calories_kcal']), 'protein_g' => $n($r['protein_g']), 'iron_mg' => $n($r['iron_mg']),
             'vitamin_c_mg' => $n($r['vitamin_c_mg']), 'folate_mcg' => $n($r['folate_mcg']),

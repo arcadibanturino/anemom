@@ -64,6 +64,7 @@ $r->add('DELETE', "$P/hb-results/{id}", [H::class, 'hbDelete']);
 // TTD
 $r->add('GET',    "$P/ttd", [H::class, 'ttdMonth']);
 $r->add('POST',   "$P/ttd/take", [H::class, 'ttdTake']);
+$r->add('POST',   "$P/ttd/skip", [H::class, 'ttdSkip']);
 $r->add('GET',    "$P/ttd/settings", [H::class, 'ttdSettings']);
 $r->add('PUT',    "$P/ttd/settings", [H::class, 'ttdSettingsUpdate']);
 $r->add('DELETE', "$P/ttd/{date}", [H::class, 'ttdDelete']);
@@ -101,6 +102,8 @@ $r->add('GET',    "$P/articles/{slug}", [N::class, 'article']);
 $r->add('POST',   "$P/fcm-tokens", [Sys::class, 'fcmRegister']);
 $r->add('DELETE', "$P/fcm-tokens", [Sys::class, 'fcmRemove']);
 $r->add('GET',    "$P/notifications", [Sys::class, 'notifications']);
+$r->add('GET',    "$P/notifications/unread-count", [Sys::class, 'notificationUnread']);
+$r->add('PUT',    "$P/notifications/read-all", [Sys::class, 'notificationReadAll']);
 $r->add('PUT',    "$P/notifications/{id}/read", [Sys::class, 'notificationRead']);
 
 $r->dispatch(Request::capture());

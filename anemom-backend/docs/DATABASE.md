@@ -87,6 +87,7 @@ Rekomendasi berupa **bahan makanan** (bukan menu jadi), dan tabel `ingredients` 
 - Bahan hanya tampil di aplikasi jika `is_recommended = 1`. Isi dulu datanya, aktifkan belakangan setelah dicek.
 - `reference` mencatat sumber data (mis. TKPI Kemenkes, NIH ODS). `NULL` berarti belum ada rujukan; jangan diaktifkan.
 - Bahan yang perlu dibatasi saat hamil (mis. hati ayam, tinggi vitamin A) diisi `pregnancy_warning`. Teksnya muncul sebagai peringatan di aplikasi.
+- Halaman detail bahan: isi `key_nutrients`, `benefit`, `preparation`, `allergy_note` (lihat `migrations/2026-11-25_detail_bahan_makanan.sql`). Bahan tanpa `benefit` tampil di daftar tanpa tombol "Lihat Detail". `subcategory_label` = label kecil di atas nama (mis. "Sayuran hijau").
 - Urutan tampil diatur `recommend_order` (kecil = lebih awal). Gambar disalin ke `STORAGE_PATH/ingredients/` lalu jalurnya diisi di `image_path`, mis. `ingredients/bayam.jpg`.
 
 Contoh menambah satu bahan (nilai di bawah hanya ilustrasi format, bukan data rujukan):

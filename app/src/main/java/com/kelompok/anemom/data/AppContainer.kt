@@ -11,6 +11,8 @@ import com.kelompok.anemom.data.repository.HomeRepository
 import com.kelompok.anemom.data.repository.NutritionRepository
 import com.kelompok.anemom.data.repository.ScreeningRepository
 import com.kelompok.anemom.data.repository.TtdRepository
+import com.kelompok.anemom.ml.segmentation.ConjunctivaSegmenter
+import com.kelompok.anemom.ml.segmentation.SegmenterProvider
 
 /** Wadah dependensi: satu tempat untuk membuat SessionManager, ApiService, dan Repository. */
 class AppContainer(context: Context) {
@@ -34,4 +36,10 @@ class AppContainer(context: Context) {
     val nutritionRepository: NutritionRepository by lazy { NutritionRepository(apiService, events) }
 
     val screeningRepository: ScreeningRepository by lazy { ScreeningRepository(apiService, events) }
+
+    /**
+     * Model segmentasi konjungtiva. U-Net atau YOLO ditentukan flavor saat build (unetDebug / yoloDebug);
+     * dimuat saat pertama kali dipakai layar AI Scan Mata.
+     */
+    val segmenter: ConjunctivaSegmenter by lazy { SegmenterProvider.create(appContext) }
 }

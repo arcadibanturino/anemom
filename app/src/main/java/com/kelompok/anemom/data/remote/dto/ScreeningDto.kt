@@ -14,15 +14,25 @@ data class ScreeningDto(
     @SerializedName("est_hb") val estHb: Double? = null,
     val risk: String? = null,
     val confidence: Double? = null,
+    /** Peluang anemia menurut model (0..1). */
+    val score: Double? = null,
+    /** Batas skrining: score >= batas -> label `anemia`. */
+    @SerializedName("score_threshold") val scoreThreshold: Double? = null,
     @SerializedName("inference_source") val inferenceSource: String? = null
 )
 
-/** Hasil model yang dihitung di HP (TFLite). Dikirim sebagai JSON di field `on_device_result`. */
+/**
+ * Hasil model yang dihitung di HP. Dikirim sebagai JSON di field `on_device_result`.
+ * [modelVersion] = versi model KLASIFIKASI; [segModelVersion] = versi model SEGMENTASI (U-Net/YOLO).
+ */
 data class EyeOnDeviceResultDto(
     val label: String,
     val confidence: Float,
     @SerializedName("est_hb") val estHb: Float? = null,
-    @SerializedName("model_version") val modelVersion: String? = null
+    @SerializedName("model_version") val modelVersion: String? = null,
+    /** `unet` | `yolo` */
+    val segmenter: String? = null,
+    @SerializedName("seg_model_version") val segModelVersion: String? = null
 )
 
 data class PpgResultDto(

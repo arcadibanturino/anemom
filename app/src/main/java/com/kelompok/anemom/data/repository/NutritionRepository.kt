@@ -2,6 +2,8 @@ package com.kelompok.anemom.data.repository
 
 import com.kelompok.anemom.BuildConfig
 import com.kelompok.anemom.data.AppEvents
+import com.kelompok.anemom.data.model.AllergenOption
+import com.kelompok.anemom.data.model.FoodGroup
 import com.kelompok.anemom.data.model.FoodItem
 import com.kelompok.anemom.data.remote.ApiService
 import com.kelompok.anemom.data.remote.apiCall
@@ -14,7 +16,7 @@ import java.net.URI
  * Daftar kosong sampai data diisi di database; layar memakai isi bawaan saat itu.
  */
 class NutritionRepository(
-    api: ApiService,
+    private val api: ApiService,
     events: AppEvents
 ) {
     private val remote = RemoteSource(events) {
@@ -22,6 +24,12 @@ class NutritionRepository(
     }
 
     val foods: Flow<List<FoodItem>> = remote.flow
+
+    /** Seluruh bahan di katalog server untuk checklist alergi (GET /ingredients), tanpa filter rekomendasi. */
+    suspend fun allergenOptions(): Result<List<AllergenOption>> =
+        apiCall { api.ingredients() }.map { list ->
+            list.map { AllergenOption(id = it.id, name = it.name, group = FoodGroup.fromServer(it.group, it.category)) }
+        }
 }
 
 private fun FoodDto.toModel() = FoodItem(

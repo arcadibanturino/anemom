@@ -28,15 +28,19 @@ data class Screening(
     val label: String?,
     val estHb: Float?,
     val confidence: Float?,
+    /** Peluang anemia menurut model (0..1); lebih bermakna untuk ditampilkan daripada [confidence]. */
+    val score: Float?,
+    /** Batas skrining yang dipakai model; null untuk hasil lama. */
+    val scoreThreshold: Float?,
     val inferenceSource: String?
 )
 
 /**
  * Skrining ke server (POST /screenings/eye, /screenings/ppg, GET /screenings).
  *
- * BELUM dipakai layar mana pun: AI Scan Mata belum punya kamera/model dan Smartband masih simulasi,
- * jadi tidak ada data asli untuk dikirim. Saat kamera dan model siap, panggil [submitEye];
- * saat band asli tersambung, panggil [submitPpg]. Jangan mengirim data simulasi ke server.
+ * [submitEye] dipakai layar AI Scan Mata (foto sudah dipotong sesuai kotak panduan dan lolos
+ * pemeriksaan U-Net di HP). [submitPpg] belum dipakai: Smartband masih simulasi, jadi jangan
+ * mengirim data simulasi ke server; panggil saat band asli tersambung.
  */
 class ScreeningRepository(
     private val api: ApiService,
@@ -50,15 +54,24 @@ class ScreeningRepository(
     /**
      * Kirim foto mata.
      * [onDevice] diisi jika model di HP sudah menghitung (server hanya menyimpan).
-     * Jika null, server menjalankan YOLO di VPS; hasilnya bisa berstatus `queued`/`processing`
-     * (HTTP 202) dan perlu dipoll lewat [recent].
+     * Jika null, server menjalankan model segmentasi + klasifikasi di VPS; hasilnya bisa berstatus
+     * `queued`/`processing` (HTTP 202) dan perlu dipoll lewat [recent].
+     * [segmenter] (`unet` / `yolo`, dari SegmenterInfo.segmenter) memberi tahu server model segmentasi
+     * mana yang dipakai, supaya hasil flavor U-Net dan YOLO tercatat terpisah di database yang sama.
      */
-    suspend fun submitEye(image: File, onDevice: EyeOnDeviceResultDto? = null): Result<Screening> {
+    suspend fun submitEye(
+        image: File,
+        onDevice: EyeOnDeviceResultDto? = null,
+        segmenter: String? = null
+    ): Result<Screening> {
         val text = "text/plain".toMediaType()
         val fields = mutableMapOf<String, RequestBody>(
             "captured_at" to Instant.now().toString().toRequestBody(text),
             "client_uuid" to UUID.randomUUID().toString().toRequestBody(text)
         )
+        if (segmenter != null) {
+            fields["segmenter"] = segmenter.toRequestBody(text)
+        }
         if (onDevice != null) {
             fields["on_device_result"] = gson.toJson(onDevice).toRequestBody("application/json".toMediaType())
         }
@@ -85,5 +98,7 @@ private fun ScreeningDto.toModel() = Screening(
     label = label,
     estHb = estHb?.toFloat(),
     confidence = confidence?.toFloat(),
+    score = score?.toFloat(),
+    scoreThreshold = scoreThreshold?.toFloat(),
     inferenceSource = inferenceSource
 )

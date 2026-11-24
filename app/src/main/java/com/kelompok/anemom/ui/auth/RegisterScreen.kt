@@ -84,7 +84,7 @@ fun RegisterScreen(
     ) {
         AnemomTopBar(
             title = "Daftar Anemom",
-            subtitle = "Mulai perjalanan sehat Bunda",
+            subtitle = "Langkah 1 dari 2 · Buat akun Bunda",
             onBack = onBack
         )
 
@@ -239,7 +239,7 @@ fun RegisterScreen(
 
         Spacer(Modifier.height(16.dp))
         GradientButton(
-            text = "Buat akun",
+            text = "Selanjutnya",
             onClick = { viewModel.register(onRegisterSuccess) },
             isLoading = state.isLoading
         )

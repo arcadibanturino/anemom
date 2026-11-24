@@ -46,6 +46,8 @@ data class UserDto(
     val id: Long = 0,
     val name: String = "",
     val email: String = "",
+    /** false = Profil Kesehatan Awal (langkah 2 pendaftaran) belum diisi. Server lama tanpa field ini = true. */
+    @SerializedName("profile_completed") val profileCompleted: Boolean = true,
     val profile: ProfileDto = ProfileDto(),
     val pregnancy: PregnancyDto = PregnancyDto()
 )

@@ -49,7 +49,7 @@ import com.kelompok.anemom.ui.theme.Pink500
 
 @Composable
 fun LoginScreen(
-    onLoginSuccess: () -> Unit,
+    onLoginSuccess: (profileCompleted: Boolean) -> Unit,
     onNavigateToRegister: () -> Unit,
     onNavigateToForgotPassword: () -> Unit,
     onBack: () -> Unit,

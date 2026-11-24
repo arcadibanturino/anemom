@@ -10,6 +10,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.kelompok.anemom.ui.auth.LoginScreen
 import com.kelompok.anemom.ui.auth.RegisterScreen
+import com.kelompok.anemom.ui.healthprofile.HealthProfileScreen
 import com.kelompok.anemom.ui.onboarding.OnboardingScreen
 import com.kelompok.anemom.ui.placeholder.TodoScreen
 import com.kelompok.anemom.ui.splash.SplashScreen
@@ -18,7 +19,9 @@ import com.kelompok.anemom.ui.nutrisi.MenuListScreen
 
 /**
  * Alur utama:
- * Splash -> (Onboarding ->) Login <-> Register -> Main (bottom nav) -> halaman fitur TODO.
+ * Splash -> (Onboarding ->) Login <-> Register (langkah 1) -> Profil Kesehatan Awal (langkah 2)
+ * -> Main (bottom nav) -> halaman fitur TODO.
+ * Login akun yang langkah 2-nya belum diisi juga masuk ke Profil Kesehatan Awal dulu.
  * Logout dari Profil mengembalikan ke Login.
  */
 @Composable
@@ -49,8 +52,8 @@ fun AppNavGraph(navController: NavHostController = rememberNavController()) {
 
         composable(Routes.LOGIN) {
             LoginScreen(
-                onLoginSuccess = {
-                    navController.navigate(Routes.MAIN) {
+                onLoginSuccess = { profileCompleted ->
+                    navController.navigate(if (profileCompleted) Routes.MAIN else Routes.HEALTH_PROFILE) {
                         popUpTo(Routes.LOGIN) { inclusive = true }
                     }
                 },
@@ -66,13 +69,29 @@ fun AppNavGraph(navController: NavHostController = rememberNavController()) {
 
         composable(Routes.REGISTER) {
             RegisterScreen(
+                // Akun sudah dibuat; lanjut ke langkah 2 (belum ke dashboard).
                 onRegisterSuccess = {
-                    navController.navigate(Routes.MAIN) {
+                    navController.navigate(Routes.HEALTH_PROFILE) {
                         popUpTo(Routes.LOGIN) { inclusive = true }
                     }
                 },
                 onNavigateToLogin = { navController.popBackStack() },
                 onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.HEALTH_PROFILE) {
+            HealthProfileScreen(
+                onSaved = {
+                    navController.navigate(Routes.MAIN) {
+                        popUpTo(Routes.HEALTH_PROFILE) { inclusive = true }
+                    }
+                },
+                onLoggedOut = {
+                    navController.navigate(Routes.LOGIN) {
+                        popUpTo(Routes.HEALTH_PROFILE) { inclusive = true }
+                    }
+                }
             )
         }
 

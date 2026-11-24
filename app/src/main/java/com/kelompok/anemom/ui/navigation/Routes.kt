@@ -8,6 +8,9 @@ object Routes {
     const val LOGIN = "login"
     const val REGISTER = "register"
 
+    /** Langkah 2 pendaftaran: Profil Kesehatan Awal. Wajib diisi sebelum Main (dashboard). */
+    const val HEALTH_PROFILE = "health_profile"
+
     const val FORGOT_PASSWORD = "forgot_password"
     const val MAIN = "main"
 

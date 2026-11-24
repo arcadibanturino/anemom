@@ -30,7 +30,8 @@ class LoginViewModel(private val authRepository: AuthRepository) : ViewModel() {
     fun onPasswordChange(value: String) =
         _uiState.update { it.copy(password = value, passwordError = null, errorMessage = null) }
 
-    fun login(onSuccess: () -> Unit) {
+    /** [onSuccess] menerima `true` bila profil sudah lengkap, `false` bila harus ke Profil Kesehatan Awal. */
+    fun login(onSuccess: (profileCompleted: Boolean) -> Unit) {
         val state = _uiState.value
         val emailError = if (!Validators.isValidEmail(state.email)) "Format email tidak valid" else null
         val passwordError = if (state.password.isEmpty()) "Kata sandi wajib diisi" else null
@@ -42,9 +43,9 @@ class LoginViewModel(private val authRepository: AuthRepository) : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             authRepository.login(state.email, state.password)
-                .onSuccess {
+                .onSuccess { profileCompleted ->
                     _uiState.update { it.copy(isLoading = false) }
-                    onSuccess()
+                    onSuccess(profileCompleted)
                 }
                 .onFailure { error ->
                     _uiState.update {

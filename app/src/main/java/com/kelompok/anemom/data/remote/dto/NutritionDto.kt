@@ -6,6 +6,8 @@ data class FoodDto(
     val id: Long = 0,
     val name: String = "",
     val category: String? = null,
+    /** `sayur` | `buah` | `protein` | `lainnya` (dihitung server dari category). Server lama: null. */
+    val group: String? = null,
     val description: String? = null,
     /** `heme` | `non_heme` | null */
     @SerializedName("iron_type") val ironType: String? = null,

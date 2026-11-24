@@ -4,8 +4,14 @@ import android.os.Build
 import com.kelompok.anemom.data.AppEvents
 import com.kelompok.anemom.data.local.SessionManager
 import com.kelompok.anemom.data.local.UserAccount
+import com.kelompok.anemom.data.model.AllergyStatus
+import com.kelompok.anemom.data.model.AnemiaHistory
+import com.kelompok.anemom.data.model.HealthProfile
+import com.kelompok.anemom.data.model.HealthProfileInput
 import com.kelompok.anemom.data.remote.ApiService
 import com.kelompok.anemom.data.remote.apiCall
+import com.kelompok.anemom.data.remote.dto.HealthProfileDto
+import com.kelompok.anemom.data.remote.dto.HealthProfileRequest
 import com.kelompok.anemom.data.remote.dto.LoginRequest
 import com.kelompok.anemom.data.remote.dto.RegisterRequest
 import com.kelompok.anemom.data.remote.dto.UpdateProfileRequest
@@ -33,6 +39,9 @@ class AuthRepository(
     val onboardingDone: Flow<Boolean> = session.onboardingDone
     val isLoggedIn: Flow<Boolean> = session.isLoggedIn
 
+    /** false = akun sudah dibuat tetapi Profil Kesehatan Awal (langkah 2) belum diisi. */
+    val profileCompleted: Flow<Boolean> = session.profileCompleted
+
     /** Profil dari salinan lokal; setiap ada yang berlangganan, profil disegarkan dari server di latar belakang. */
     val account: Flow<UserAccount?> = session.account.onStart {
         scope.launch { refreshProfile() }
@@ -41,8 +50,9 @@ class AuthRepository(
     suspend fun setOnboardingDone() = session.setOnboardingDone()
 
     /**
-     * Daftar akun baru. Dari [account] hanya name, email, birthDate, dan hpht yang dikirim;
-     * usia kehamilan dan trimester dihitung server dari HPHT.
+     * Daftar akun baru (langkah 1). Dari [account] hanya name, email, birthDate, dan hpht yang dikirim;
+     * usia kehamilan dan trimester dihitung server dari HPHT. Akun langsung dibuat dan sesi tersimpan
+     * dengan profileCompleted = false; layar Profil Kesehatan Awal (langkah 2) yang melengkapinya.
      */
     suspend fun register(account: UserAccount, password: String): Result<Unit> =
         apiCall {
@@ -61,12 +71,14 @@ class AuthRepository(
             events.invalidateData()
         }
 
-    suspend fun login(email: String, password: String): Result<Unit> =
+    /** Berhasil = `true` jika profil sudah lengkap (ke dashboard), `false` jika harus ke langkah 2 dulu. */
+    suspend fun login(email: String, password: String): Result<Boolean> =
         apiCall {
             api.login(LoginRequest(email = email.trim(), password = password, deviceName = deviceName()))
         }.mapCatching { data ->
             session.saveSession(data.token, data.user.toAccount())
             events.invalidateData()
+            data.user.profileCompleted
         }
 
     /** Keluar. Token dicabut di server (jika ada koneksi), lalu sesi lokal dihapus apa pun hasilnya. */
@@ -111,6 +123,32 @@ class AuthRepository(
             events.invalidateData()
         }
 
+    /** Isi form Profil Kesehatan Awal yang sudah tersimpan di server (kosong semua untuk akun baru). */
+    suspend fun loadHealthProfile(): Result<HealthProfile> =
+        apiCall { api.healthProfile() }.map { it.toModel() }
+
+    /**
+     * Simpan Profil Kesehatan Awal (PUT /me/health-profile). Berhasil = salinan lokal diganti dengan
+     * user dari server (profileCompleted = true), sehingga dashboard boleh dibuka.
+     */
+    suspend fun saveHealthProfile(input: HealthProfileInput): Result<Unit> =
+        apiCall {
+            api.saveHealthProfile(
+                HealthProfileRequest(
+                    heightCm = input.heightCm,
+                    preWeightKg = input.preWeightKg,
+                    anemiaHistory = input.anemiaHistory.code,
+                    allergyStatus = input.allergyStatus.code,
+                    lilaCm = input.lilaCm,
+                    allergenIds = if (input.allergyStatus == AllergyStatus.ADA) input.allergenIds.sorted() else emptyList()
+                )
+            )
+        }.mapCatching { user ->
+            session.saveAccount(user.toAccount())
+            lastProfileRefresh = System.currentTimeMillis()
+            events.invalidateData()
+        }
+
     private fun deviceName(): String = "${Build.MANUFACTURER} ${Build.MODEL}".take(100)
 }
 
@@ -120,5 +158,15 @@ private fun UserDto.toAccount() = UserAccount(
     birthDate = profile.birthDate.orEmpty(),
     hpht = profile.hpht.orEmpty(),
     trimester = pregnancy.trimester,
-    healthFacility = profile.healthFacility.orEmpty()
+    healthFacility = profile.healthFacility.orEmpty(),
+    profileCompleted = profileCompleted
+)
+
+private fun HealthProfileDto.toModel() = HealthProfile(
+    heightCm = heightCm,
+    preWeightKg = preWeightKg,
+    anemiaHistory = AnemiaHistory.fromCode(anemiaHistory),
+    allergyStatus = AllergyStatus.fromCode(allergyStatus),
+    lilaCm = lilaCm,
+    allergenIds = allergenIds.toSet()
 )

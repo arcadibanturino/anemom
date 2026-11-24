@@ -6,6 +6,8 @@ import com.kelompok.anemom.data.remote.dto.DashboardDto
 import com.kelompok.anemom.data.remote.dto.FoodDto
 import com.kelompok.anemom.data.remote.dto.HbCreateRequest
 import com.kelompok.anemom.data.remote.dto.HbResultDto
+import com.kelompok.anemom.data.remote.dto.HealthProfileDto
+import com.kelompok.anemom.data.remote.dto.HealthProfileRequest
 import com.kelompok.anemom.data.remote.dto.LoginRequest
 import com.kelompok.anemom.data.remote.dto.PpgRequest
 import com.kelompok.anemom.data.remote.dto.RegisterRequest
@@ -51,6 +53,15 @@ interface ApiService {
     @PUT("me")
     suspend fun updateMe(@Body request: UpdateProfileRequest): ApiEnvelope<UserDto>
 
+    // ---- Profil Kesehatan Awal (langkah 2 pendaftaran) ----
+
+    @GET("me/health-profile")
+    suspend fun healthProfile(): ApiEnvelope<HealthProfileDto>
+
+    /** Simpan lengkap; mengembalikan user dengan `profile_completed` yang sudah diperbarui. */
+    @PUT("me/health-profile")
+    suspend fun saveHealthProfile(@Body request: HealthProfileRequest): ApiEnvelope<UserDto>
+
     // ---- Beranda ----
 
     @GET("dashboard")
@@ -79,6 +90,10 @@ interface ApiService {
     suspend fun updateTtdSettings(@Body request: TtdSettingsRequest): ApiEnvelope<TtdSettingsDto>
 
     // ---- Nutrisi ----
+
+    /** Seluruh katalog bahan (dipakai checklist alergi). Server membatasi maksimal 200. */
+    @GET("ingredients")
+    suspend fun ingredients(@Query("limit") limit: Int = 200): ApiEnvelope<List<FoodDto>>
 
     /** Bahan yang direkomendasikan (is_recommended = 1), sudah berurutan dari server. Bisa kosong. */
     @GET("recommendations")

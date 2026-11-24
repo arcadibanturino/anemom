@@ -29,7 +29,9 @@ data class UserAccount(
     val birthDate: String = "",
     val hpht: String,
     val trimester: Int,
-    val healthFacility: String = ""
+    val healthFacility: String = "",
+    /** false = langkah 2 pendaftaran (Profil Kesehatan Awal) belum diisi; dashboard belum boleh dibuka. */
+    val profileCompleted: Boolean = true
 )
 
 /** Menyimpan status onboarding, token sesi, dan salinan profil memakai DataStore. */
@@ -46,6 +48,7 @@ class SessionManager(context: Context) {
         val FACILITY = stringPreferencesKey("account_health_facility")
         val HPHT = stringPreferencesKey("account_hpht")
         val TRIMESTER = intPreferencesKey("account_trimester")
+        val PROFILE_COMPLETED = booleanPreferencesKey("account_profile_completed")
     }
 
     private val preferences: Flow<Preferences> = dataStore.data.catch { e ->
@@ -62,6 +65,14 @@ class SessionManager(context: Context) {
     /** Dianggap sudah masuk selama token tersimpan (token 30 hari; server yang menolak bila kedaluwarsa). */
     val isLoggedIn: Flow<Boolean> = token.map { it != null }
 
+    /**
+     * Profil Kesehatan Awal sudah diisi? Kunci yang belum ada (sesi dari versi aplikasi sebelum fitur ini)
+     * dianggap sudah; GET /me berikutnya mengoreksinya dari server.
+     */
+    val profileCompleted: Flow<Boolean> = preferences
+        .map { it[Keys.PROFILE_COMPLETED] ?: true }
+        .distinctUntilChanged()
+
     val account: Flow<UserAccount?> = preferences.map { p ->
         val email = p[Keys.EMAIL] ?: return@map null
         UserAccount(
@@ -70,7 +81,8 @@ class SessionManager(context: Context) {
             birthDate = p[Keys.BIRTH_DATE].orEmpty(),
             hpht = p[Keys.HPHT].orEmpty(),
             trimester = p[Keys.TRIMESTER] ?: 1,
-            healthFacility = p[Keys.FACILITY].orEmpty()
+            healthFacility = p[Keys.FACILITY].orEmpty(),
+            profileCompleted = p[Keys.PROFILE_COMPLETED] ?: true
         )
     }
 
@@ -101,6 +113,7 @@ class SessionManager(context: Context) {
             it.remove(Keys.FACILITY)
             it.remove(Keys.HPHT)
             it.remove(Keys.TRIMESTER)
+            it.remove(Keys.PROFILE_COMPLETED)
         }
     }
 
@@ -111,5 +124,6 @@ class SessionManager(context: Context) {
         p[Keys.FACILITY] = account.healthFacility
         p[Keys.HPHT] = account.hpht
         p[Keys.TRIMESTER] = account.trimester
+        p[Keys.PROFILE_COMPLETED] = account.profileCompleted
     }
 }

@@ -1,0 +1,22 @@
+# Salin ke .github/CODEOWNERS lalu ganti nama-pengguna-github dengan akun GitHub anggota kelompok.
+# Pull Request yang menyentuh folder di bawah otomatis meminta review dari pemiliknya.
+# Baris yang lebih bawah menang bila ada beberapa pola yang cocok.
+
+# Default: ketua / penanggung jawab integrasi
+*                                                   @nama-pengguna-ketua
+
+# Kontrak BERSAMA: perubahan wajib disetujui kedua tim
+app/src/main/java/com/kelompok/anemom/ml/   @nama-pengguna-unet @nama-pengguna-yolo
+ml-service/anemom_ml/segmenters/base.py             @nama-pengguna-unet @nama-pengguna-yolo
+ml-service/anemom_ml/features.py                    @nama-pengguna-unet @nama-pengguna-yolo
+anemom-backend/database/                                   @nama-pengguna-ketua
+
+# Milik tim U-Net
+app/src/unet/                               @nama-pengguna-unet
+ml-service/anemom_ml/segmenters/unet.py             @nama-pengguna-unet
+ml-service/models/segmentation/unet/                @nama-pengguna-unet
+
+# Milik tim YOLO
+app/src/yolo/                               @nama-pengguna-yolo
+ml-service/anemom_ml/segmenters/yolo.py             @nama-pengguna-yolo
+ml-service/models/segmentation/yolo/                @nama-pengguna-yolo

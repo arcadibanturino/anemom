@@ -2,6 +2,8 @@ package com.kelompok.anemom.data.remote
 
 import com.google.gson.JsonElement
 import com.kelompok.anemom.data.remote.dto.AuthData
+import com.kelompok.anemom.data.remote.dto.ConsentDto
+import com.kelompok.anemom.data.remote.dto.ConsentRequest
 import com.kelompok.anemom.data.remote.dto.DashboardDto
 import com.kelompok.anemom.data.remote.dto.FoodDto
 import com.kelompok.anemom.data.remote.dto.HbCreateRequest
@@ -9,6 +11,7 @@ import com.kelompok.anemom.data.remote.dto.HbResultDto
 import com.kelompok.anemom.data.remote.dto.HealthProfileDto
 import com.kelompok.anemom.data.remote.dto.HealthProfileRequest
 import com.kelompok.anemom.data.remote.dto.LoginRequest
+import com.kelompok.anemom.data.remote.dto.NotificationDto
 import com.kelompok.anemom.data.remote.dto.PpgRequest
 import com.kelompok.anemom.data.remote.dto.RegisterRequest
 import com.kelompok.anemom.data.remote.dto.ScreeningDto
@@ -17,6 +20,7 @@ import com.kelompok.anemom.data.remote.dto.TtdSettingsDto
 import com.kelompok.anemom.data.remote.dto.TtdSettingsRequest
 import com.kelompok.anemom.data.remote.dto.TtdTakeDto
 import com.kelompok.anemom.data.remote.dto.TtdTakeRequest
+import com.kelompok.anemom.data.remote.dto.UnreadCountDto
 import com.kelompok.anemom.data.remote.dto.UpdateProfileRequest
 import com.kelompok.anemom.data.remote.dto.UserDto
 import okhttp3.MultipartBody
@@ -28,6 +32,7 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Part
 import retrofit2.http.PartMap
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
@@ -83,6 +88,10 @@ interface ApiService {
     @POST("ttd/take")
     suspend fun ttdTake(@Body request: TtdTakeRequest = TtdTakeRequest()): ApiEnvelope<TtdTakeDto>
 
+    /** Laporan "Belum diminum" dari alarm (tidak menambah kepatuhan). */
+    @POST("ttd/skip")
+    suspend fun ttdSkip(@Body request: TtdTakeRequest = TtdTakeRequest()): ApiEnvelope<JsonElement>
+
     @GET("ttd/settings")
     suspend fun ttdSettings(): ApiEnvelope<TtdSettingsDto>
 
@@ -98,6 +107,33 @@ interface ApiService {
     /** Bahan yang direkomendasikan (is_recommended = 1), sudah berurutan dari server. Bisa kosong. */
     @GET("recommendations")
     suspend fun recommendations(): ApiEnvelope<List<FoodDto>>
+
+    /** Satu bahan untuk layar Detail Bahan Makanan; meta = konteks ibu (risiko Hb, alergi). */
+    @GET("ingredients/{id}")
+    suspend fun ingredient(@Path("id") id: Long): ApiEnvelope<FoodDto>
+
+    // ---- Notifikasi ----
+
+    /** Terbaru dulu; meta.unread = jumlah belum dibaca. Server membuat pengingat yang berlaku sebelum menjawab. */
+    @GET("notifications")
+    suspend fun notifications(@Query("limit") limit: Int = 50): ApiEnvelope<List<NotificationDto>>
+
+    @GET("notifications/unread-count")
+    suspend fun notificationUnreadCount(): ApiEnvelope<UnreadCountDto>
+
+    @PUT("notifications/{id}/read")
+    suspend fun markNotificationRead(@Path("id") id: Long): ApiEnvelope<JsonElement>
+
+    @PUT("notifications/read-all")
+    suspend fun markAllNotificationsRead(): ApiEnvelope<JsonElement>
+
+    // ---- Persetujuan (Privasi & disclaimer) ----
+
+    @GET("consents")
+    suspend fun consents(): ApiEnvelope<List<ConsentDto>>
+
+    @POST("consents")
+    suspend fun setConsent(@Body request: ConsentRequest): ApiEnvelope<List<ConsentDto>>
 
     // ---- Skrining ----
 

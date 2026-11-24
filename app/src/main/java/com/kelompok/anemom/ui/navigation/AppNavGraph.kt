@@ -15,6 +15,7 @@ import com.kelompok.anemom.ui.onboarding.OnboardingScreen
 import com.kelompok.anemom.ui.placeholder.TodoScreen
 import com.kelompok.anemom.ui.splash.SplashScreen
 import com.kelompok.anemom.ui.auth.ForgotPasswordScreen
+import com.kelompok.anemom.ui.nutrisi.FoodDetailScreen
 import com.kelompok.anemom.ui.nutrisi.MenuListScreen
 
 /**
@@ -99,6 +100,7 @@ fun AppNavGraph(navController: NavHostController = rememberNavController()) {
             MainScreen(
                 onOpenFeature = { name -> navController.navigate(Routes.todo(name)) },
                 onOpenMenuList = { navController.navigate(Routes.MENU_LIST) },
+                onOpenFoodDetail = { id -> navController.navigate(Routes.foodDetail(id)) },
                 onLoggedOut = {
                     navController.navigate(Routes.LOGIN) {
                         popUpTo(Routes.MAIN) { inclusive = true }
@@ -108,7 +110,17 @@ fun AppNavGraph(navController: NavHostController = rememberNavController()) {
         }
 
         composable(Routes.MENU_LIST) {
-            MenuListScreen(onBack = { navController.popBackStack() })
+            MenuListScreen(
+                onBack = { navController.popBackStack() },
+                onOpenDetail = { id -> navController.navigate(Routes.foodDetail(id)) }
+            )
+        }
+
+        composable(
+            route = Routes.FOOD_DETAIL,
+            arguments = listOf(navArgument(Routes.FOOD_DETAIL_ARG_ID) { type = NavType.LongType })
+        ) {
+            FoodDetailScreen(onBack = { navController.popBackStack() })
         }
 
         composable(

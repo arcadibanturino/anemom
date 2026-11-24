@@ -16,6 +16,12 @@ object Routes {
 
     const val MENU_LIST = "menu_list"
 
+    /** Detail Bahan Makanan, dibuka dari Rekomendasi Makanan. Argumen: ID bahan (Long). */
+    const val FOOD_DETAIL_ARG_ID = "foodId"
+    const val FOOD_DETAIL = "food_detail/{$FOOD_DETAIL_ARG_ID}"
+
+    fun foodDetail(id: Long): String = "food_detail/$id"
+
     const val TODO_ARG_TITLE = "title"
     const val TODO = "todo/{$TODO_ARG_TITLE}"
 

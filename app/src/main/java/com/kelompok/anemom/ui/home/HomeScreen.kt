@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,8 +46,11 @@ import com.kelompok.anemom.R
 import com.kelompok.anemom.data.model.DashboardData
 import com.kelompok.anemom.ui.AppViewModelProvider
 import com.kelompok.anemom.ui.components.AnemomCard
+import com.kelompok.anemom.ui.ftux.TourTarget
+import com.kelompok.anemom.ui.ftux.tourTarget
 import com.kelompok.anemom.ui.components.AnemomChip
 import com.kelompok.anemom.ui.components.RiskChip
+import com.kelompok.anemom.ui.theme.ErrorRed
 import com.kelompok.anemom.ui.theme.AmberText
 import com.kelompok.anemom.ui.theme.CardBorder
 import com.kelompok.anemom.ui.theme.Maroon
@@ -69,15 +73,30 @@ import com.kelompok.anemom.ui.nutrisi.MenuRecommendation
 @Composable
 fun HomeScreen(
     onFeatureClick: (featureName: String) -> Unit,
+    onOpenNotifications: () -> Unit = {},
+    onOpenFoodDetail: (foodId: Long) -> Unit = {},
+    onOpenHbChart: () -> Unit = {},
     viewModel: HomeViewModel = viewModel(factory = AppViewModelProvider.Factory)
 ) {
     val data by viewModel.dashboard.collectAsStateWithLifecycle()
     val error by viewModel.loadError.collectAsStateWithLifecycle()
     val menus by viewModel.menus.collectAsStateWithLifecycle()
+    val unread by viewModel.unreadNotifications.collectAsStateWithLifecycle()
+
+    // Setiap kali Beranda tampil (termasuk kembali dari Notifikasi), cek ulang notifikasi belum dibaca.
+    LaunchedEffect(Unit) { viewModel.refreshNotifications() }
 
     val dashboard = data
     if (dashboard != null) {
-        HomeContent(dashboard = dashboard, menus = menus, onFeatureClick = onFeatureClick)
+        HomeContent(
+            dashboard = dashboard,
+            menus = menus,
+            unreadNotifications = unread,
+            onFeatureClick = onFeatureClick,
+            onOpenNotifications = onOpenNotifications,
+            onOpenFoodDetail = onOpenFoodDetail,
+            onOpenHbChart = onOpenHbChart
+        )
     } else {
         HomeLoading(error = error, onRetry = viewModel::retry)
     }
@@ -126,7 +145,11 @@ private fun HomeLoading(error: String?, onRetry: () -> Unit) {
 private fun HomeContent(
     dashboard: DashboardData,
     menus: List<MenuRecommendation>,
-    onFeatureClick: (String) -> Unit
+    unreadNotifications: Int,
+    onFeatureClick: (String) -> Unit,
+    onOpenNotifications: () -> Unit,
+    onOpenFoodDetail: (Long) -> Unit,
+    onOpenHbChart: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -150,21 +173,21 @@ private fun HomeContent(
                     color = MutedText
                 )
             }
-            Icon(
-                imageVector = Icons.Outlined.FavoriteBorder,
-                contentDescription = null,
-                tint = Pink500
-            )
+            NotificationBell(unread = unreadNotifications, onClick = onOpenNotifications)
         }
 
-        PregnancyBanner(dashboard)
-        HbCard(dashboard)
-        TtdCard(dashboard)
+        // Bagian yang disorot panduan pertama kali (ui/ftux/HomeTour.kt).
+        Box(Modifier.tourTarget(TourTarget.DASHBOARD, part = 0)) { PregnancyBanner(dashboard) }
+        Box(Modifier.tourTarget(TourTarget.DASHBOARD, part = 1)) { HbCard(dashboard) }
+        Box(Modifier.tourTarget(TourTarget.TTD)) { TtdCard(dashboard) }
 
+        Box(Modifier.tourTarget(TourTarget.MENU)) {
         MenuRecommendationSection(
             menus = menus,
-            onSeeAll = { onFeatureClick("Rekomendasi Menu Makanan") }
+            onSeeAll = { onFeatureClick("Rekomendasi Menu Makanan") },
+            onOpenDetail = onOpenFoodDetail
         )
+        }
 
         Text(
             text = "AI/PPG hanya skrining awal, bukan tes darah.\nKonfirmasi dengan pemeriksaan Hb darah.",
@@ -174,8 +197,39 @@ private fun HomeContent(
             modifier = Modifier.fillMaxWidth()
         )
 
-        TrendCard(dashboard)
+        Box(Modifier.tourTarget(TourTarget.TREN_HB)) { TrendCard(dashboard, onOpenHbChart) }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+/** Ikon hati di sapaan: membuka Notifikasi; titik merah bila ada yang belum dibaca. */
+@Composable
+private fun NotificationBell(unread: Int, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .clickable(onClickLabel = "Buka notifikasi", onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.FavoriteBorder,
+            contentDescription = if (unread > 0) "Notifikasi, $unread belum dibaca" else "Notifikasi",
+            tint = Pink500
+        )
+        if (unread > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 9.dp, end = 8.dp)
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(Color.White)
+                    .padding(1.5.dp)
+                    .clip(CircleShape)
+                    .background(ErrorRed)
+            )
+        }
     }
 }
 
@@ -335,7 +389,8 @@ private fun TtdCard(dashboard: DashboardData) {
 @Composable
 private fun MenuRecommendationSection(
     menus: List<MenuRecommendation>,
-    onSeeAll: () -> Unit
+    onSeeAll: () -> Unit,
+    onOpenDetail: (Long) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -370,7 +425,7 @@ private fun MenuRecommendationSection(
             )
         } else {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(shown, key = { it.title }) { menu -> MenuCard(menu = menu) }
+                items(shown, key = { it.title }) { menu -> MenuCard(menu = menu, onOpenDetail = onOpenDetail) }
             }
             Text(
                 text = "Geser untuk melihat bahan lainnya →",
@@ -382,7 +437,7 @@ private fun MenuRecommendationSection(
 }
 
 @Composable
-private fun MenuCard(menu: MenuRecommendation) {
+private fun MenuCard(menu: MenuRecommendation, onOpenDetail: (Long) -> Unit) {
     val shape = RoundedCornerShape(20.dp)
     Column(
         modifier = Modifier
@@ -390,6 +445,7 @@ private fun MenuCard(menu: MenuRecommendation) {
             .clip(shape)
             .background(Color.White)
             .border(1.dp, CardBorder, shape)
+            .then(if (menu.hasDetail) Modifier.clickable { onOpenDetail(menu.id) } else Modifier)
     ) {
         MenuImage(
             imageUrl = menu.imageUrl,
@@ -423,18 +479,39 @@ private fun MenuCard(menu: MenuRecommendation) {
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis
             )
+            if (menu.hasDetail) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Lihat Detail →",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Pink500
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun TrendCard(dashboard: DashboardData) {
+private fun TrendCard(dashboard: DashboardData, onOpenDetail: () -> Unit) {
     AnemomCard(Modifier.fillMaxWidth()) {
-        Text(
-            text = "Tren HB",
-            style = MaterialTheme.typography.titleMedium,
-            color = Maroon
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Tren HB",
+                style = MaterialTheme.typography.titleMedium,
+                color = Maroon,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "Lihat detail →",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Pink500,
+                modifier = Modifier
+                    .clickable(onClick = onOpenDetail)
+                    .padding(vertical = 4.dp)
+            )
+        }
         Spacer(Modifier.height(8.dp))
         if (dashboard.hbTrend.size >= 2) {
             HbTrendChart(points = dashboard.hbTrend)

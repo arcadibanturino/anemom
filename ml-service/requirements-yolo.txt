@@ -1,0 +1,3 @@
+# Tambahan khusus eksperimen YOLO (dipasang hanya bila ENABLED_SEGMENTERS memuat "yolo").
+-r requirements.txt
+ultralytics

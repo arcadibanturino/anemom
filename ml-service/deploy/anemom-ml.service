@@ -1,0 +1,23 @@
+[Unit]
+Description=Anemom ml-service (AI mata: segmentasi U-Net/YOLO + klasifikasi)
+After=network.target
+
+[Service]
+Type=simple
+User=anemom-ml
+Group=anemom-ml
+WorkingDirectory=/opt/anemom/ml-service
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=ENABLED_SEGMENTERS=unet
+Environment=DEFAULT_SEGMENTER=unet
+Environment=CLASSIFIER_CANDIDATE=RF_legacy27
+# Hanya localhost: dipanggil API PHP lewat INFERENCE_URL=http://127.0.0.1:8001
+ExecStart=/opt/anemom/ml-service/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8001 --workers 1
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,6 @@
+__pycache__/
+.venv/
+*.csv
+# Dataset (Eyes-defy-anemia, ~636 MB, perlu login IEEE DataPort) tidak disimpan di repo.
+data/
+datasets/

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kelompok.anemom.data.model.DashboardData
 import com.kelompok.anemom.data.repository.HomeRepository
+import com.kelompok.anemom.data.repository.NotificationRepository
 import com.kelompok.anemom.data.repository.NutritionRepository
 import com.kelompok.anemom.ui.nutrisi.DailyMenuPlanner
 import com.kelompok.anemom.ui.nutrisi.MenuRecommendation
@@ -12,11 +13,21 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 class HomeViewModel(
     private val homeRepository: HomeRepository,
-    nutritionRepository: NutritionRepository
+    nutritionRepository: NutritionRepository,
+    private val notificationRepository: NotificationRepository
 ) : ViewModel() {
+
+    /** Jumlah notifikasi belum dibaca; > 0 = titik merah di ikon hati. */
+    val unreadNotifications: StateFlow<Int> = notificationRepository.unreadCount
+
+    /** Dipanggil setiap Beranda tampil, supaya titik merah ikut berubah. */
+    fun refreshNotifications() {
+        viewModelScope.launch { notificationRepository.refreshUnread() }
+    }
 
     /** Null selama data pertama dari server belum datang. */
     val dashboard: StateFlow<DashboardData?> = homeRepository.dashboard()

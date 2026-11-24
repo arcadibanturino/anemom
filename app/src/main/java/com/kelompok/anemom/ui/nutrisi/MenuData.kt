@@ -11,7 +11,11 @@ data class MenuRecommendation(
     /** URL gambar lengkap dari server; null = belum ada foto, kartu menampilkan ikon pengganti. */
     val imageUrl: String?,
     /** Peringatan untuk ibu hamil dari server; null = tidak ada. */
-    val warning: String? = null
+    val warning: String? = null,
+    /** ID bahan di server (untuk membuka Detail Bahan Makanan). */
+    val id: Long = 0,
+    /** true = kartu menampilkan "Lihat Detail" dan bisa ditekan. */
+    val hasDetail: Boolean = false
 )
 
 /**
@@ -28,7 +32,9 @@ private fun FoodItem.toMenuRecommendation() = MenuRecommendation(
     tag = tagText(),
     description = description,
     imageUrl = imageUrl,
-    warning = pregnancyWarning
+    warning = pregnancyWarning,
+    id = id,
+    hasDetail = hasDetail
 )
 
 private fun FoodItem.tagText(): String = when {

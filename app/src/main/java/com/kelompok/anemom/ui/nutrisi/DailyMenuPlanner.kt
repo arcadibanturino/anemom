@@ -23,9 +23,11 @@ object DailyMenuPlanner {
         val day = today.toEpochDay()
 
         val animal = candidates.filter { it.ironType == "heme" }
-        val vegetables = candidates.filter { !it.isIronBooster && it.category == "sayur" }
-        val legumes = candidates.filter { !it.isIronBooster && it.category == "nabati" }
-        val fruits = candidates.filter { it.isIronBooster }
+        val vegetables = candidates.filter { it.category == "sayur" }
+        val legumes = candidates.filter { it.category == "nabati" }
+        // Utamakan buah kaya vitamin C; sayur kaya vitamin C (mis. brokoli) tetap di kelompok sayur.
+        val fruits = candidates.filter { it.category == "buah" && it.isIronBooster }
+            .ifEmpty { candidates.filter { it.category == "buah" } }
 
         val belowNormal = risk != null && risk != HbRisk.NORMAL
 

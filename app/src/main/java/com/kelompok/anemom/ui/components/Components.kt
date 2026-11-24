@@ -117,11 +117,6 @@ fun AnemomTopBar(
                 )
             }
         }
-        Icon(
-            imageVector = Icons.Outlined.FavoriteBorder,
-            contentDescription = null,
-            tint = Pink500
-        )
     }
 }
 

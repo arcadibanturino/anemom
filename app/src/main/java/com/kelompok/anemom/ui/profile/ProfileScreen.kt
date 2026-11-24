@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kelompok.anemom.ui.AppViewModelProvider
-import com.kelompok.anemom.ui.components.AnemomTopBar
+import com.kelompok.anemom.ui.components.AnemomTabHeader
 import com.kelompok.anemom.ui.components.MomAvatar
 import com.kelompok.anemom.ui.theme.CardBorder
 import com.kelompok.anemom.ui.theme.ErrorRed
@@ -64,6 +64,7 @@ private const val NOT_FILLED = "Belum diisi"
  *
  * Tombol Edit di kedua bagian membuka [EditProfileScreen]. Kolom yang belum terisi tampil "Belum diisi".
  */
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun ProfileScreen(
     onBack: () -> Unit,
@@ -98,11 +99,9 @@ fun ProfileScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
     ) {
-        AnemomTopBar(
-            title = "Profil saya",
-            subtitle = "Kenali Bunda lebih dekat",
-            onBack = onBack
-        )
+        // Layar utama tab: tanpa tombol kembali.
+        AnemomTabHeader(title = "Profil saya", subtitle = "Kenali Bunda lebih dekat")
+        Spacer(Modifier.height(12.dp))
 
         // Header profil
         Row(

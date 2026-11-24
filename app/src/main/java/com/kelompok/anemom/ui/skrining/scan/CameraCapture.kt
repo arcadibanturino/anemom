@@ -41,6 +41,7 @@ val previewResolutionSelector: ResolutionSelector = ResolutionSelector.Builder()
 /**
  * Foto sekitar 12 MP (4032 x 3024). Tidak memakai "resolusi tertinggi" karena sebagian HP punya
  * mode 50-200 MP yang lambat dan boros memori. Hanya bagian kotak panduan yang di-decode.
+ * Kamera depan yang lebih kecil (5-8 MP) otomatis memakai resolusi tertingginya, bukan diperbesar.
  */
 val captureResolutionSelector: ResolutionSelector = ResolutionSelector.Builder()
     .setAspectRatioStrategy(ratio43)
@@ -94,7 +95,20 @@ suspend fun ImageCapture.takePictureAsync(executor: Executor): ImageProxy =
  * Untuk JPEG, hanya potongan yang di-decode (BitmapRegionDecoder), jadi foto 12 MP tidak perlu
  * dimuat utuh ke memori.
  */
-fun ImageProxy.decodeGuideCropAndClose(viewWidth: Int, viewHeight: Int): Bitmap = use { proxy ->
+fun ImageProxy.decodeGuideCropAndClose(viewWidth: Int, viewHeight: Int, mirror: Boolean = false): Bitmap =
+    decodeGuideCrop(viewWidth, viewHeight).let { if (mirror) it.mirrored() else it }
+
+/**
+ * Kamera depan: preview tampil seperti cermin, tetapi foto CameraX tidak. Foto dibalik supaya hasil yang
+ * diperiksa Bunda sama dengan yang terlihat di layar. Warna (yang dianalisis model) tidak berubah.
+ */
+private fun Bitmap.mirrored(): Bitmap {
+    val out = Bitmap.createBitmap(this, 0, 0, width, height, Matrix().apply { preScale(-1f, 1f) }, true)
+    if (out !== this) recycle()
+    return out
+}
+
+private fun ImageProxy.decodeGuideCrop(viewWidth: Int, viewHeight: Int): Bitmap = use { proxy ->
     val rotation = proxy.imageInfo.rotationDegrees
     if (proxy.format != ImageFormat.JPEG) {
         // Cadangan (jarang): decode utuh, putar, lalu potong.

@@ -44,6 +44,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.material.icons.outlined.Cameraswitch
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -170,6 +172,10 @@ private fun CameraStep(
     }
     var camera by remember { mutableStateOf<Camera?>(null) }
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
+    // Kamera depan bawaan (Bunda bisa memotret sendiri); belakang bisa dipilih untuk hasil lebih tajam.
+    var lensFacing by rememberSaveable { mutableStateOf(CameraSelector.LENS_FACING_FRONT) }
+    var canFlip by remember { mutableStateOf(false) }
+    val front = lensFacing == CameraSelector.LENS_FACING_FRONT
     var capturing by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
 
@@ -178,6 +184,13 @@ private fun CameraStep(
             previewView = previewView,
             imageCapture = imageCapture,
             camera = camera,
+            lensFacing = lensFacing,
+            canFlip = canFlip,
+            onCanFlip = { canFlip = it },
+            onFlip = {
+                cameraError = null
+                lensFacing = if (front) CameraSelector.LENS_FACING_BACK else CameraSelector.LENS_FACING_FRONT
+            },
             onCamera = { camera = it },
             onViewSize = { viewSize = it },
             onCameraError = { cameraError = it },
@@ -204,12 +217,21 @@ private fun CameraStep(
     AnemomCard(Modifier.fillMaxWidth()) {
         Text("Cara memotret", style = MaterialTheme.typography.titleMedium, color = Maroon)
         Spacer(Modifier.height(6.dp))
-        listOf(
-            "Cari ruangan dengan cahaya terang dan merata. Hindari cahaya dari belakang.",
-            "Tarik kelopak mata bawah perlahan sampai bagian dalam yang merah terlihat jelas.",
-            "Pegang HP sekitar 15 cm dari mata (kamera sudah diperbesar 2x). Jangan terlalu dekat agar tidak buram.",
-            "Ketuk bagian merah di layar untuk memfokuskan, tahan stabil, lalu ambil foto."
-        ).forEachIndexed { i, step ->
+        (if (front) {
+            listOf(
+                "Kamera depan tidak punya lampu: cari cahaya terang dari depan wajah, misalnya dekat jendela.",
+                "Tarik kelopak mata bawah perlahan sampai bagian dalam yang merah terlihat jelas.",
+                "Pegang HP sekitar 20-25 cm dari mata. Kamera depan sulit fokus dari jarak dekat.",
+                "Tahan stabil, lalu ambil foto. Bila hasilnya buram, minta bantuan orang lain dengan kamera belakang."
+            )
+        } else {
+            listOf(
+                "Cari ruangan dengan cahaya terang dan merata. Hindari cahaya dari belakang.",
+                "Tarik kelopak mata bawah perlahan sampai bagian dalam yang merah terlihat jelas.",
+                "Pegang HP sekitar 15 cm dari mata (kamera sudah diperbesar 2x). Jangan terlalu dekat agar tidak buram.",
+                "Ketuk bagian merah di layar untuk memfokuskan, tahan stabil, lalu ambil foto."
+            )
+        }).forEachIndexed { i, step ->
             Text("${i + 1}. $step", style = MaterialTheme.typography.bodySmall, color = MutedText)
         }
     }
@@ -243,7 +265,7 @@ private fun CameraStep(
                         val point = previewView.meteringPointFactory.createPoint(center.centerX(), center.centerY())
                         cam.cameraControl.focusOn(point, mainExecutor)
                         val proxy = imageCapture.takePictureAsync(mainExecutor)
-                        withContext(Dispatchers.Default) { proxy.decodeGuideCropAndClose(size.width, size.height) }
+                        withContext(Dispatchers.Default) { proxy.decodeGuideCropAndClose(size.width, size.height, mirror = front) }
                     }
                         .onSuccess(onCaptured)
                         .onFailure { onCaptureFailed("Gagal mengambil foto. Coba lagi.") }
@@ -264,15 +286,23 @@ private fun CameraStep(
     }
 }
 
-/** Zoom yang bisa dipilih. 2x bawaan: HP bisa dipegang lebih jauh sehingga kamera tetap fokus. */
+/**
+ * Zoom yang bisa dipilih. Kamera belakang 2x bawaan: HP bisa dipegang lebih jauh sehingga tetap fokus.
+ * Kamera depan 1x bawaan: zoom di kamera depan hampir selalu digital dan mengurangi ketajaman.
+ */
 private val ZOOM_STEPS = listOf(1f, 2f, 3f)
 private const val DEFAULT_ZOOM = 2f
+private const val DEFAULT_ZOOM_FRONT = 1f
 
 @Composable
 private fun CameraWithGuide(
     previewView: PreviewView,
     imageCapture: ImageCapture,
     camera: Camera?,
+    lensFacing: Int,
+    canFlip: Boolean,
+    onCanFlip: (Boolean) -> Unit,
+    onFlip: () -> Unit,
     onCamera: (Camera?) -> Unit,
     onViewSize: (IntSize) -> Unit,
     onCameraError: (String) -> Unit,
@@ -281,10 +311,11 @@ private fun CameraWithGuide(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
-    var torchOn by remember { mutableStateOf(false) }
-    var zoom by remember { mutableStateOf(DEFAULT_ZOOM) }
+    val front = lensFacing == CameraSelector.LENS_FACING_FRONT
+    var torchOn by remember(lensFacing) { mutableStateOf(false) }
+    var zoom by remember(lensFacing) { mutableStateOf(if (front) DEFAULT_ZOOM_FRONT else DEFAULT_ZOOM) }
 
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, lensFacing) {
         var disposed = false
         var provider: ProcessCameraProvider? = null
         val future = ProcessCameraProvider.getInstance(context)
@@ -294,10 +325,17 @@ private fun CameraWithGuide(
                 val p = future.get().also { provider = it }
                 val preview = Preview.Builder().setResolutionSelector(previewResolutionSelector).build()
                 preview.setSurfaceProvider(previewView.surfaceProvider)
+                onCanFlip(
+                    runCatching {
+                        p.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) && p.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)
+                    }.getOrDefault(false)
+                )
                 p.unbindAll()
-                onCamera(p.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageCapture))
+                val selector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
+                onCamera(p.bindToLifecycle(lifecycleOwner, selector, preview, imageCapture))
             }.onFailure {
-                onCameraError("Kamera belakang tidak dapat dibuka di perangkat ini.")
+                // HP tanpa kamera depan (atau gagal dibuka): pindah otomatis ke kamera belakang.
+                if (front) onFlip() else onCameraError("Kamera tidak dapat dibuka di perangkat ini.")
             }
         }, ContextCompat.getMainExecutor(context))
         onDispose {
@@ -355,6 +393,22 @@ private fun CameraWithGuide(
                     .background(Color.Black.copy(alpha = 0.45f))
             ) {
                 Text("${zoom.coerceAtMost(maxZoom).roundToInt()}x", color = Color.White)
+            }
+        }
+        if (canFlip) {
+            IconButton(
+                onClick = onFlip,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(12.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.45f))
+            ) {
+                Icon(
+                    Icons.Outlined.Cameraswitch,
+                    contentDescription = if (front) "Pakai kamera belakang" else "Pakai kamera depan",
+                    tint = Color.White
+                )
             }
         }
         if (camera?.cameraInfo?.hasFlashUnit() == true) {

@@ -16,6 +16,7 @@ import com.kelompok.anemom.data.repository.ScreeningRepository
 import com.kelompok.anemom.data.repository.TtdRepository
 import com.kelompok.anemom.data.smartband.SimulatedSmartbandRepository
 import com.kelompok.anemom.data.smartband.SmartbandRepository
+import com.kelompok.anemom.data.smartband.BleSmartbandRepository
 import com.kelompok.anemom.ml.segmentation.ConjunctivaSegmenter
 import com.kelompok.anemom.ml.segmentation.SegmenterProvider
 
@@ -56,7 +57,9 @@ class AppContainer(context: Context) {
      * dan Rekam PPG, supaya status sambungan sama di keduanya.
      * TODO(ble): ganti dengan BleSmartbandRepository(appContext, apiService) saat perangkat IoT siap.
      */
-    val smartbandRepository: SmartbandRepository by lazy { SimulatedSmartbandRepository() }
+    val smartbandRepository: SmartbandRepository by lazy {
+        if (USE_SIMULATED_SMARTBAND) SimulatedSmartbandRepository() else BleSmartbandRepository(appContext)
+    }
 
     /**
      * Model segmentasi konjungtiva. U-Net atau YOLO ditentukan flavor saat build (unetDebug / yoloDebug);
@@ -64,3 +67,4 @@ class AppContainer(context: Context) {
      */
     val segmenter: ConjunctivaSegmenter by lazy { SegmenterProvider.create(appContext) }
 }
+private const val USE_SIMULATED_SMARTBAND = false

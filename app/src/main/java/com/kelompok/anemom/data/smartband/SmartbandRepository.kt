@@ -66,6 +66,12 @@ interface SmartbandRepository {
     /** Frekuensi sampel PPG (Hz). */
     val sampleRateHz: Int
 
+    val waveInverted: Boolean get() = false
+
+    val requiredPermissions: Array<String> get() = emptyArray()
+
+    fun hasPermissions(): Boolean = true
+
     val bluetoothEnabled: StateFlow<Boolean>
 
     /** Smartband yang sedang tersambung, atau null. */

@@ -18,7 +18,7 @@ Proyek PJBL mata kuliah Aplikasi Mobile.
 | Tentang Anemom, Privasi & disclaimer | Selesai (persetujuan disimpan di server, tabel `consents`) |
 | Skrining (hub) + Input Hb darah | Selesai (disimpan di server lewat API) |
 | AI Scan Mata | Selesai (prototipe penelitian): kamera + kotak panduan, U-Net TFLite di HP untuk cek kualitas foto, analisis di server (U-Net + fitur warna G1 + Random Forest), hasil berupa skor skrining |
-| Smartband & PPG | Tampilan selesai (Koneksi Bluetooth, Rekam PPG 10 dtk persiapan + 60 dtk rekaman, kanal merah + inframerah), data SIMULASI. TODO: firmware ESP32-C3 + MAX30102, BLE, endpoint dan model PPG |
+| Smartband & PPG | Koneksi Bluetooth LE ke smartband ESP32-C3 + MAX30102 (`BleSmartbandRepository`; simulasi bisa dipilih lewat `USE_SIMULATED_SMARTBAND` di `AppContainer`), Rekam PPG 10 dtk persiapan + 30 dtk rekaman, kanal merah + inframerah. TODO: firmware di repo, model PPG |
 | Pelacak TTD | Selesai: status Sudah / Belum / Belum Dikonfirmasi, kalender, kepatuhan 4 minggu, riwayat 7 hari |
 | Alarm & pengingat TTD | Selesai: alarm layar penuh di atas layar kunci (tetap berbunyi walau aplikasi ditutup, dipasang ulang setelah HP menyala ulang), geser Sudah/Belum, tunda 10/15/30 menit. Bawaan menyala pukul 19.00, bisa dimatikan, **wajib aktif bila Hb lab terakhir di bawah normal**. Push FCM belum |
 | Riwayat pemeriksaan | Selesai: Hb lab + AI Scan + PPG per bulan, filter, Detail riwayat + ekspor PDF |

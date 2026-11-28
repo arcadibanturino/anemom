@@ -19,8 +19,8 @@ import kotlinx.coroutines.launch
 /** Hitung mundur sebelum merekam (detik). */
 const val PREPARE_SECONDS = 10
 
-/** Lama rekaman PPG (detik). */
-const val RECORD_SECONDS = 60
+/** Lama rekaman PPG (detik). 30 detik sesuai asistensi 28 Nov 2026 (dataset PPG juga 30 detik). */
+const val RECORD_SECONDS = 30
 
 /** Lebar potongan gelombang yang tampil di layar (detik). */
 private const val WINDOW_SECONDS = 4

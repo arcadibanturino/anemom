@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS images (
 -- ---------------------------------------------------------------------
 -- 5. DATA SENSOR PPG DARI BAND
 -- ---------------------------------------------------------------------
--- Sinyal mentah (60 detik x ~100 Hz x kanal Red+IR) terlalu besar untuk baris tabel,
+-- Sinyal mentah (30 detik x ~100 Hz x kanal Red+IR) terlalu besar untuk baris tabel,
 -- jadi disimpan sebagai berkas (CSV gzip) dan jalurnya dicatat di raw_path.
 -- Fitur hasil ekstraksi (untuk model) disimpan di kolom JSON features.
 CREATE TABLE IF NOT EXISTS ppg_sessions (

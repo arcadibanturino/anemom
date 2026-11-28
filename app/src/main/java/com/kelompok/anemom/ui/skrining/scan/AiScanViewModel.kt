@@ -61,6 +61,12 @@ class AiScanViewModel(
     private val _uiState = MutableStateFlow(AiScanUiState())
     val uiState: StateFlow<AiScanUiState> = _uiState.asStateFlow()
 
+    /**
+     * Model segmentasi yang sama, untuk petunjuk live di kamera ([LiveEyeAnalyzer]).
+     * Dipanggil dari thread analisis, bukan thread utama (memuat model butuh waktu).
+     */
+    val liveSegmenterProvider: () -> ConjunctivaSegmenter get() = segmenterProvider
+
     /** Dipanggil layar setelah foto diambil dan dipotong sesuai kotak panduan. */
     fun onPhotoCaptured(croppedPhoto: Bitmap) {
         _uiState.update { it.copy(step = ScanStep.Checking, message = null) }

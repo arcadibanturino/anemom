@@ -51,16 +51,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -100,14 +94,37 @@ import com.kelompok.anemom.ui.theme.Maroon
 import com.kelompok.anemom.ui.theme.MutedText
 import com.kelompok.anemom.ui.theme.Pink100
 import com.kelompok.anemom.ui.theme.Pink500
+import androidx.camera.core.ImageAnalysis
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import com.kelompok.anemom.BuildConfig
+import com.kelompok.anemom.ml.segmentation.ConjunctivaSegmenter
+import com.kelompok.anemom.ui.skrining.scan.EyeGuideOverlay
+import com.kelompok.anemom.ui.skrining.scan.GuideChecklist
+import com.kelompok.anemom.ui.skrining.scan.GuideHint
+import com.kelompok.anemom.ui.skrining.scan.GuideHintBanner
+import com.kelompok.anemom.ui.skrining.scan.LiveEyeAnalyzer
+import com.kelompok.anemom.ui.skrining.scan.LiveFrame
+import com.kelompok.anemom.ui.skrining.scan.LiveGuide
+import com.kelompok.anemom.ui.skrining.scan.LiveGuideEngine
+import com.kelompok.anemom.ui.skrining.scan.analysisResolutionSelector
+import com.kelompok.anemom.ui.skrining.scan.debugText
+import java.util.concurrent.Executors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 /**
- * AI Scan Mata: kamera dengan kotak panduan -> foto dipotong sesuai kotak -> U-Net di HP memeriksa
- * apakah konjungtiva terlihat -> pratinjau mask -> foto potongan dikirim ke server untuk dianalisis.
+ * AI Scan Mata: kamera dengan bingkai mata + petunjuk live (detektor wajah ML Kit saat jauh, U-Net saat
+ * dekat) -> foto diambil OTOMATIS saat mata di bingkai, kelopak ditarik, tajam, dan stabil (tombol manual
+ * tetap ada sebagai cadangan) -> foto dipotong sesuai kotak -> U-Net di HP memeriksa ulang -> pratinjau
+ * mask -> foto potongan dikirim ke server untuk dianalisis.
  * Model segmentasi (U-Net / YOLO) ditentukan flavor build, lihat ml/segmentation.
  */
 @Composable
@@ -127,6 +144,7 @@ fun AiScanScreen(
             ScanStep.Camera, ScanStep.Checking -> CameraStep(
                 checking = step == ScanStep.Checking,
                 message = state.message,
+                segmenterProvider = viewModel.liveSegmenterProvider,
                 onCaptured = viewModel::onPhotoCaptured,
                 onCaptureFailed = viewModel::onCaptureFailed
             )
@@ -140,18 +158,20 @@ fun AiScanScreen(
 }
 
 // ---------------------------------------------------------------------------------------------
-// Tahap 1: kamera
+// Tahap 1: kamera dengan petunjuk live dan jepret otomatis
 // ---------------------------------------------------------------------------------------------
 
 @Composable
 private fun CameraStep(
     checking: Boolean,
     message: String?,
+    segmenterProvider: () -> ConjunctivaSegmenter,
     onCaptured: (android.graphics.Bitmap) -> Unit,
     onCaptureFailed: (String?) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
     var hasPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -177,21 +197,127 @@ private fun CameraStep(
     var canFlip by remember { mutableStateOf(false) }
     val front = lensFacing == CameraSelector.LENS_FACING_FRONT
     var capturing by remember { mutableStateOf(false) }
+    /** Foto sudah terambil (sensor selesai), tinggal diproses: Bunda boleh melepas kelopak. */
+    var shutterDone by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
+
+    // --- Petunjuk live: frame kecil -> LiveEyeAnalyzer (thread analisis) -> LiveGuideEngine (thread utama).
+    val engine = remember { LiveGuideEngine() }
+    var guide by remember { mutableStateOf(LiveGuide()) }
+    var liveFrame by remember { mutableStateOf<LiveFrame?>(null) }
+    /** false bila HP tidak sanggup menjalankan kamera + analisis bersamaan: tinggal mode manual. */
+    var analysisBound by remember { mutableStateOf(true) }
+    /** Bertambah satu setiap kali mesin petunjuk meminta foto (tidak pernah terlewat oleh recomposition). */
+    var autoCaptureRequests by remember { mutableIntStateOf(0) }
+    val mainExecutor = remember { ContextCompat.getMainExecutor(context) }
+    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+    val analyzer = remember {
+        LiveEyeAnalyzer(segmenterProvider) { frame ->
+            mainExecutor.execute {
+                liveFrame = frame
+                val g = engine.update(frame.observation)
+                guide = g
+                if (g.shouldCapture) autoCaptureRequests++
+            }
+        }
+    }
+    val imageAnalysis = remember {
+        ImageAnalysis.Builder()
+            .setResolutionSelector(analysisResolutionSelector)
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+            .setOutputImageRotationEnabled(true)
+            .build()
+            .also { it.setAnalyzer(analysisExecutor, analyzer) }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            analyzer.paused = true
+            imageAnalysis.clearAnalyzer()
+            analysisExecutor.execute { analyzer.close() }
+            analysisExecutor.shutdown()
+        }
+    }
+    SideEffect {
+        analyzer.viewWidth = viewSize.width
+        analyzer.viewHeight = viewSize.height
+        analyzer.paused = capturing || checking || !hasPermission
+    }
+    fun resetGuide() {
+        engine.reset()
+        guide = LiveGuide()
+        liveFrame = null
+    }
+    LaunchedEffect(lensFacing) { resetGuide() }
+
+    val autoAvailable = analysisBound && guide.hint != GuideHint.AUTO_UNAVAILABLE
+
+    fun capture(auto: Boolean) {
+        val cam = camera ?: return
+        val size = viewSize
+        if (capturing || checking || size == IntSize.Zero) return
+        // Otomatis: potong ketat seperti yang terlihat di kotak pembatas. Manual: seluruh kotak panduan.
+        val focus = if (auto) liveFrame?.focus else null
+        capturing = true
+        analyzer.paused = true
+        scope.launch {
+            runCatching {
+                // Manual: fokus ke pusat kotak panduan dulu. Otomatis: LANGSUNG jepret, karena gambar sudah
+                // dinilai tajam dan stabil; menunggu fokus ulang (s.d. 1,2 dtk) hanya membuat mata perih,
+                // dan kamera depan berfokus tetap sehingga fokus ulang tidak berguna.
+                if (!auto) {
+                    val center = GuideBox.rectInView(size.width.toFloat(), size.height.toFloat())
+                    val point = previewView.meteringPointFactory.createPoint(center.centerX(), center.centerY())
+                    cam.cameraControl.focusOn(point, mainExecutor)
+                }
+                val proxy = imageCapture.takePictureAsync(mainExecutor)
+                // Sensor selesai: getar + "boleh lepas". Pemotongan dan pemeriksaan U-Net berjalan sesudahnya.
+                shutterDone = true
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                withContext(Dispatchers.Default) { proxy.decodeGuideCropAndClose(size.width, size.height, mirror = front, focus = focus) }
+            }
+                .onSuccess(onCaptured)
+                .onFailure { onCaptureFailed("Gagal mengambil foto. Coba lagi.") }
+            capturing = false
+            shutterDone = false
+            resetGuide()
+        }
+    }
+    // Analisis terpasang tetapi tidak ada frame sama sekali (mis. konversi gambar gagal di HP ini): mode manual.
+    val checkingNow by rememberUpdatedState(checking)
+    LaunchedEffect(camera) {
+        if (camera != null) {
+            delay(5000)
+            if (liveFrame == null && !capturing && !checkingNow) analysisBound = false
+        }
+    }
+    LaunchedEffect(autoCaptureRequests) {
+        if (autoCaptureRequests > 0) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            capture(auto = true)
+        }
+    }
 
     if (hasPermission) {
         CameraWithGuide(
             previewView = previewView,
             imageCapture = imageCapture,
+            imageAnalysis = imageAnalysis,
             camera = camera,
             lensFacing = lensFacing,
             canFlip = canFlip,
+            guide = guide,
+            liveFrame = liveFrame,
+            autoAvailable = autoAvailable,
+            busy = capturing || checking,
+            shutterDone = shutterDone || checking,
             onCanFlip = { canFlip = it },
             onFlip = {
                 cameraError = null
                 lensFacing = if (front) CameraSelector.LENS_FACING_BACK else CameraSelector.LENS_FACING_FRONT
             },
             onCamera = { camera = it },
+            onAnalysisBound = { analysisBound = it },
             onViewSize = { viewSize = it },
             onCameraError = { cameraError = it },
             modifier = Modifier
@@ -199,6 +325,10 @@ private fun CameraStep(
                 .aspectRatio(3f / 4f)
                 .clip(RoundedCornerShape(24.dp))
         )
+        if (autoAvailable) {
+            Spacer(Modifier.height(12.dp))
+            GuideChecklist(guide.checks, Modifier.padding(horizontal = 4.dp))
+        }
     } else {
         Box(
             modifier = Modifier
@@ -220,16 +350,16 @@ private fun CameraStep(
         (if (front) {
             listOf(
                 "Kamera depan tidak punya lampu: cari cahaya terang dari depan wajah, misalnya dekat jendela.",
-                "Tarik kelopak mata bawah perlahan sampai bagian dalam yang merah terlihat jelas.",
-                "Pegang HP sekitar 20-25 cm dari mata. Kamera depan sulit fokus dari jarak dekat.",
-                "Tahan stabil, lalu ambil foto. Bila hasilnya buram, minta bantuan orang lain dengan kamera belakang."
+                "Taruh mata di garis atas bingkai dan kelopak bawah di lengkung merah. Lihat ke atas, tarik kelopak bawah, lalu arahkan kamera sedikit dari atas (agak menukik) ke kelopak bawah.",
+                "Kamera depan sulit fokus dari jarak sangat dekat. Bila diminta, jauhkan HP sedikit.",
+                "Tarik kelopak hanya saat diminta. Saat bingkai hijau, tahan sebentar sampai HP bergetar, lalu kelopak boleh dilepas."
             )
         } else {
             listOf(
                 "Cari ruangan dengan cahaya terang dan merata. Hindari cahaya dari belakang.",
-                "Tarik kelopak mata bawah perlahan sampai bagian dalam yang merah terlihat jelas.",
-                "Pegang HP sekitar 15 cm dari mata (kamera sudah diperbesar 2x). Jangan terlalu dekat agar tidak buram.",
-                "Ketuk bagian merah di layar untuk memfokuskan, tahan stabil, lalu ambil foto."
+                "Taruh mata di garis atas bingkai dan kelopak bawah di lengkung merah. Lihat ke atas, tarik kelopak bawah, lalu arahkan kamera sedikit dari atas (agak menukik) ke kelopak bawah.",
+                "Kamera sudah diperbesar 2x, jadi HP cukup dipegang sekitar 15 cm dari mata.",
+                "Tarik kelopak hanya saat diminta. Saat bingkai hijau, tahan sebentar sampai HP bergetar, lalu kelopak boleh dilepas."
             )
         }).forEachIndexed { i, step ->
             Text("${i + 1}. $step", style = MaterialTheme.typography.bodySmall, color = MutedText)
@@ -237,41 +367,36 @@ private fun CameraStep(
     }
     Spacer(Modifier.height(14.dp))
 
-    if (!hasPermission) {
-        GradientButton(
+    val canShoot = !capturing && !checking && cameraError == null && camera != null && viewSize != IntSize.Zero
+    when {
+        !hasPermission -> GradientButton(
             text = "Izinkan kamera",
             icon = Icons.Outlined.CameraAlt,
             onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }
         )
-    } else {
-        GradientButton(
+        // Petunjuk otomatis tidak jalan di HP ini: tombol jepret jadi tombol utama seperti sebelumnya.
+        !autoAvailable -> GradientButton(
             text = when {
                 checking -> "Memeriksa foto..."
                 capturing -> "Memfokuskan..."
-                else -> "Ambil foto"
+                else -> "Ambil foto manual"
             },
             icon = Icons.Outlined.CameraAlt,
-            enabled = !capturing && !checking && cameraError == null && camera != null && viewSize != IntSize.Zero,
+            enabled = canShoot,
             isLoading = capturing || checking,
-            onClick = {
-                val cam = camera ?: return@GradientButton
-                val size = viewSize
-                capturing = true
-                scope.launch {
-                    val mainExecutor = ContextCompat.getMainExecutor(context)
-                    runCatching {
-                        // Fokus ke pusat kotak panduan dulu, baru ambil foto.
-                        val center = GuideBox.rectInView(size.width.toFloat(), size.height.toFloat())
-                        val point = previewView.meteringPointFactory.createPoint(center.centerX(), center.centerY())
-                        cam.cameraControl.focusOn(point, mainExecutor)
-                        val proxy = imageCapture.takePictureAsync(mainExecutor)
-                        withContext(Dispatchers.Default) { proxy.decodeGuideCropAndClose(size.width, size.height, mirror = front) }
-                    }
-                        .onSuccess(onCaptured)
-                        .onFailure { onCaptureFailed("Gagal mengambil foto. Coba lagi.") }
-                    capturing = false
-                }
-            }
+            onClick = { capture(auto = false) }
+        )
+        checking || capturing -> GradientButton(
+            text = if (checking) "Memeriksa foto..." else "Memotret...",
+            icon = Icons.Outlined.CameraAlt,
+            enabled = false,
+            isLoading = true,
+            onClick = {}
+        )
+        // Cadangan bila petunjuk otomatis tidak kunjung hijau (mis. cahaya kurang pas).
+        else -> AnemomOutlinedButton(
+            text = "Ambil foto manual",
+            onClick = { if (canShoot) capture(auto = false) }
         )
     }
     (cameraError ?: message)?.let {
@@ -298,12 +423,19 @@ private const val DEFAULT_ZOOM_FRONT = 1f
 private fun CameraWithGuide(
     previewView: PreviewView,
     imageCapture: ImageCapture,
+    imageAnalysis: ImageAnalysis,
     camera: Camera?,
     lensFacing: Int,
     canFlip: Boolean,
+    guide: LiveGuide,
+    liveFrame: LiveFrame?,
+    autoAvailable: Boolean,
+    busy: Boolean,
+    shutterDone: Boolean,
     onCanFlip: (Boolean) -> Unit,
     onFlip: () -> Unit,
     onCamera: (Camera?) -> Unit,
+    onAnalysisBound: (Boolean) -> Unit,
     onViewSize: (IntSize) -> Unit,
     onCameraError: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -332,7 +464,16 @@ private fun CameraWithGuide(
                 )
                 p.unbindAll()
                 val selector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
-                onCamera(p.bindToLifecycle(lifecycleOwner, selector, preview, imageCapture))
+                // Preview + foto + analisis live. Bila HP tidak sanggup ketiganya, tanpa analisis (mode manual).
+                val cam = runCatching {
+                    p.bindToLifecycle(lifecycleOwner, selector, preview, imageCapture, imageAnalysis)
+                        .also { onAnalysisBound(true) }
+                }.getOrElse {
+                    p.unbindAll()
+                    onAnalysisBound(false)
+                    p.bindToLifecycle(lifecycleOwner, selector, preview, imageCapture)
+                }
+                onCamera(cam)
             }.onFailure {
                 // HP tanpa kamera depan (atau gagal dibuka): pindah otomatis ke kamera belakang.
                 if (front) onFlip() else onCameraError("Kamera tidak dapat dibuka di perangkat ini.")
@@ -361,7 +502,11 @@ private fun CameraWithGuide(
 
     Box(modifier.onSizeChanged(onViewSize)) {
         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-        GuideOverlay(
+        EyeGuideOverlay(
+            guide = guide,
+            frame = liveFrame,
+            mirror = front,
+            showLive = autoAvailable && !busy,
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(camera) {
@@ -373,12 +518,37 @@ private fun CameraWithGuide(
                     }
                 }
         )
-        AnemomChip(
-            text = "Taruh bagian merah di dalam kotak",
-            containerColor = Color.Black.copy(alpha = 0.55f),
-            contentColor = Color.White,
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp)
-        )
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            GuideHintBanner(
+                text = when {
+                    shutterDone -> "Foto diambil. Kelopak boleh dilepas."
+                    busy -> GuideHint.CAPTURING.text
+                    autoAvailable -> guide.hint.text
+                    else -> "Taruh mata di dalam bingkai, tarik kelopak bawah, lalu ambil foto."
+                },
+                ready = autoAvailable && (guide.ready || busy)
+            )
+            if (BuildConfig.DEBUG && autoAvailable) {
+                liveFrame?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "${it.observation.debugText()} · ${it.processMs} ms",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black.copy(alpha = 0.45f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
         val zoomChoices = ZOOM_STEPS.filter { it <= maxZoom }
         if (zoomChoices.size > 1) {
             TextButton(
@@ -398,6 +568,7 @@ private fun CameraWithGuide(
         if (canFlip) {
             IconButton(
                 onClick = onFlip,
+                enabled = !busy,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(12.dp)
@@ -427,29 +598,6 @@ private fun CameraWithGuide(
                 )
             }
         }
-    }
-}
-
-/** Gelapkan area di luar kotak panduan dan beri garis putih pada kotaknya. */
-@Composable
-private fun GuideOverlay(modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val r = GuideBox.rectInView(size.width, size.height)
-        val corner = CornerRadius(20.dp.toPx())
-        val hole = RoundRect(r.left, r.top, r.right, r.bottom, corner)
-        val dim = Path().apply {
-            fillType = PathFillType.EvenOdd
-            addRect(Rect(Offset.Zero, size))
-            addRoundRect(hole)
-        }
-        drawPath(dim, Color.Black.copy(alpha = 0.45f))
-        drawRoundRect(
-            color = Color.White,
-            topLeft = Offset(r.left, r.top),
-            size = Size(r.width(), r.height()),
-            cornerRadius = corner,
-            style = Stroke(width = 3.dp.toPx())
-        )
     }
 }
 

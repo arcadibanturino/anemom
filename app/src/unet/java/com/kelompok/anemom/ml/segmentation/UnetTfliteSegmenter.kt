@@ -32,7 +32,8 @@ class UnetTfliteSegmenter(context: Context) : ConjunctivaSegmenter {
 
     private val interpreter = Interpreter(
         loadModel(context, MODEL_ASSET),
-        Interpreter.Options().setNumThreads(2)
+        // 2-4 thread sesuai jumlah inti CPU: petunjuk live menjalankan U-Net berkali-kali per detik.
+        Interpreter.Options().setNumThreads(Runtime.getRuntime().availableProcessors().coerceIn(2, 4))
     )
 
     private val input: ByteBuffer =

@@ -50,6 +50,18 @@ val captureResolutionSelector: ResolutionSelector = ResolutionSelector.Builder()
     )
     .build()
 
+/**
+ * Frame analisis live (petunjuk otomatis) ±960x720, rasio 4:3 yang sama dengan preview supaya kotak
+ * panduan dipetakan dengan cara yang sama ([GuideBox.cropRectInPhoto]). Tidak 640x480: potongan ketat
+ * di sekitar konjungtiva ([ConjunctivaFocus]) jadi terlalu kecil dan pecah sebelum masuk U-Net.
+ */
+val analysisResolutionSelector: ResolutionSelector = ResolutionSelector.Builder()
+    .setAspectRatioStrategy(ratio43)
+    .setResolutionStrategy(
+        ResolutionStrategy(Size(960, 720), ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER)
+    )
+    .build()
+
 /** Lebar maksimum potongan hasil. Lebih lebar dari ini dikecilkan (kelipatan 2) agar hemat memori. */
 private const val MAX_CROP_WIDTH = 2600
 
@@ -92,11 +104,18 @@ suspend fun ImageCapture.takePictureAsync(executor: Executor): ImageProxy =
  * Ambil bagian foto di dalam kotak panduan (tampilan kamera [viewWidth] x [viewHeight]),
  * sudah tegak, lalu tutup ImageProxy. Berat: panggil di Dispatchers.Default.
  *
+ * [focus] (opsional) = potongan ketat di sekitar konjungtiva dari analisis live ([ConjunctivaFocus]),
+ * relatif terhadap kotak panduan dan belum dicermin, sama seperti foto mentah di sini.
+ *
  * Untuk JPEG, hanya potongan yang di-decode (BitmapRegionDecoder), jadi foto 12 MP tidak perlu
  * dimuat utuh ke memori.
  */
-fun ImageProxy.decodeGuideCropAndClose(viewWidth: Int, viewHeight: Int, mirror: Boolean = false): Bitmap =
-    decodeGuideCrop(viewWidth, viewHeight).let { if (mirror) it.mirrored() else it }
+fun ImageProxy.decodeGuideCropAndClose(
+    viewWidth: Int,
+    viewHeight: Int,
+    mirror: Boolean = false,
+    focus: FloatArray? = null
+): Bitmap = decodeGuideCrop(viewWidth, viewHeight, focus).let { if (mirror) it.mirrored() else it }
 
 /**
  * Kamera depan: preview tampil seperti cermin, tetapi foto CameraX tidak. Foto dibalik supaya hasil yang
@@ -108,12 +127,14 @@ private fun Bitmap.mirrored(): Bitmap {
     return out
 }
 
-private fun ImageProxy.decodeGuideCrop(viewWidth: Int, viewHeight: Int): Bitmap = use { proxy ->
+private fun ImageProxy.decodeGuideCrop(viewWidth: Int, viewHeight: Int, focus: FloatArray?): Bitmap = use { proxy ->
     val rotation = proxy.imageInfo.rotationDegrees
     if (proxy.format != ImageFormat.JPEG) {
         // Cadangan (jarang): decode utuh, putar, lalu potong.
         val upright = proxy.toBitmap().rotated(rotation)
-        val cropped = GuideBox.crop(upright, viewWidth, viewHeight)
+        val c = GuideBox.cropRectInPhoto(upright.width, upright.height, viewWidth, viewHeight)
+            .let { if (focus != null) ConjunctivaFocus.applyTo(it, focus) else it }
+        val cropped = Bitmap.createBitmap(upright, c[0], c[1], c[2] - c[0], c[3] - c[1])
         if (cropped !== upright) upright.recycle()
         return@use cropped
     }
@@ -132,6 +153,7 @@ private fun ImageProxy.decodeGuideCrop(viewWidth: Int, viewHeight: Int): Bitmap 
         val uprightW = if (sideways) rawH else rawW
         val uprightH = if (sideways) rawW else rawH
         val c = GuideBox.cropRectInPhoto(uprightW, uprightH, viewWidth, viewHeight)
+            .let { if (focus != null) ConjunctivaFocus.applyTo(it, focus) else it }
         val raw = uprightRectToRaw(c[0], c[1], c[2], c[3], rawW, rawH, rotation)
         var sample = 1
         while ((c[2] - c[0]) / sample > MAX_CROP_WIDTH) sample *= 2

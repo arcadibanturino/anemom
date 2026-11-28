@@ -119,6 +119,9 @@ dependencies {
     // Menjalankan model .tflite (U-Net) di HP. LiteRT = nama baru TensorFlow Lite (paket org.tensorflow.lite).
     implementation("com.google.ai.edge.litert:litert:1.4.2")
 
+    // Petunjuk live AI Scan Mata: detektor wajah + kontur mata (model bawaan di APK, jalan offline).
+    implementation("com.google.mlkit:face-detection:16.1.7")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
